@@ -1,0 +1,53 @@
+*{box-sizing: border-box;}
+#root{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    min-width: 100vw;
+}
+.auth-button{
+    padding:4px;
+    font-weight: 200;
+    border-radius: 4px;
+    max-width: 400px;
+    width:70%;
+    min-width: 300px;
+    border-radius: 3px;
+    margin-bottom: 20px;
+
+}
+.hidden{display: none;}
+.email-input{
+    padding:1px 10px 1px 10px;
+    font-weight: 200;
+    border-radius: 4px;
+    max-width: 400px;
+    width:70%;
+    border-radius: 2px;
+    height: 35px;
+    min-width: 300px;
+    border-radius: 3px;
+    
+    border: 1px solid black;
+    
+    
+}
+
+.gmail-signup{
+    border: 0 groove white;
+}
+.email-signup{
+    background-color: white;
+    color:black;
+}
+
+.center{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    width: 100vw;
+}
