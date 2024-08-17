@@ -1,28 +1,35 @@
 import React from "react";
 import { useState,useRef,useEffect} from "react";
-import { useCtx }  from "../../AppScreen";
-import Message from '../Message/Message';
-import socket from '../../../Socket'
-import send from './send.svg';
+import { useCtx }  from "../../../AppScreen";
+import Message from '../Message';
+import socket from '../../../../Socket'
+import send from '/send.svg';
 let k=0;
 export default function MessageBar(props) {
       const [message, setMessage] = useState("");
       const ref=useRef(null);
-      const {chatID}=useCtx();
-      const {setMessages}=useCtx()
+      const {setMessages,Messages,scrollable,userID,chatID}=useCtx()
       async function SendMessage(event){
               event.preventDefault();
-              let time=new Date();
-              socket.emit('sendMessage',
-              {chat:chatID.current,content:message}
-              )
+              let msg={
+                _id:new Date(),
+                uid:userID.current,
+                content:message,
+                time:new Date(),
+                status:'⧖'
+              };
+              setMessages([...Messages,msg]);
+              socket.emit('sendMessage',{chat:chatID,content:message})
               setMessage("");
+              scrollable.current.scrollTo(0,scrollable.current.scrollHeight);
             }
 
       return (
       <div className="sticky bottom-0 w-full">
         <div className="p-1  flex bg-white w-full flex items-end">
-         <textarea rows='1' ref={ref} onInput={function(){
+         <textarea rows='1' onKeyDown={(event)=>{
+            if(event.ctrlKey&&event.key=='Enter')SendMessage(event);
+            }} ref={ref} onInput={function(){
           ref.current.style.height='auto';
           
           ref.current.style.height=ref.current.scrollHeight+'px';

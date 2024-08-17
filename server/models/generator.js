@@ -1,15 +1,15 @@
-const {faker}=require('@faker-js/faker');
-const models=require('./exports');
-const mongoose=require('mongoose');
-mongoose.connect("mongodb://localhost:27017/ChatApp")
-const Chats=models.ChatsModel
-const Groups=models.GroupsModel
-const Permissions=models.PermissionsModel
-const Settings=models.SettingsModel
-const Users=models.UsersModel
-const Messages=models.MessagesModel
+const { faker } = require('@faker-js/faker');
+const models = require('./exports');
+const mongoose = require('mongoose');
 
 mongoose.connect('mongodb://localhost:27017/ChatApp');
+
+const Chats = models.ChatsModel;
+const Groups = models.GroupsModel;
+const Permissions = models.PermissionsModel;
+const Settings = models.SettingsModel;
+const Users = models.UsersModel;
+const Messages = models.MessagesModel;
 
 const generateData = async () => {
     try {
@@ -18,17 +18,21 @@ const generateData = async () => {
         await Messages.deleteMany({});
         await Permissions.deleteMany({});
         await Settings.deleteMany({});
-
+        let x=faker.person.fullName()
         // Create users
         const user1 = new Users({
-            name: faker.name.fullName(),
+            name:x,
             Chats: [],
+            username:x,
+            email:`${faker.animal.fish()}@gmail.com`, 
             SettingsID: null,
         });
-
+        x=faker.person.fullName()
         const user2 = new Users({
-            name: faker.name.fullName(),
+            name: x,
             Chats: [],
+            username:x,
+            email:`${faker.animal.fish()}@gmail.com`, 
             SettingsID: null,
         });
 
@@ -38,7 +42,8 @@ const generateData = async () => {
         // Create chat
         const chat = new Chats({
             group: null,
-            type: "private",
+            users:[user1._id,user2._id],
+            type: 'private',
         });
 
         await chat.save();
@@ -46,36 +51,33 @@ const generateData = async () => {
         // Add chat to users
         user1.Chats.push(chat._id);
         user2.Chats.push(chat._id);
-
-        await user1.save();
         await user2.save();
+        user1.contacts.push(user2._id);
+        await user1.save();
 
-        // Create 10 messages for each user
-        const messages = [];
-        for (let i = 0; i < 10; i++) {
-            messages.push(
-                new Messages({
-                    chat: chat._id,
-                    content: faker.lorem.sentence(),
-                    type: "text",
-                    uid: user1._id,
-                    reply_to: null,
-                })
-            );
-            messages.push(
-                new Messages({
-                    chat: chat._id,
-                    content: faker.lorem.sentence(),
-                    type: "text",
-                    uid: user2._id,
-                    reply_to: null,
-                })
-            );
+        // Create messages for each user
+        for (let i = 0; i < 50; i++) {
+            const message1 = new Messages({
+                chat: chat._id,
+                content: faker.lorem.sentence(),
+                type: 'text',
+                uid: user1._id,
+                reply_to: null,
+            });
+
+            const message2 = new Messages({
+                chat: chat._id,
+                content: faker.lorem.sentence(),
+                type: 'text',
+                uid: user2._id,
+                reply_to: null,
+            });
+
+            await message1.save();
+            await message2.save();
         }
-
-        await Messages.insertMany(messages);
-
-        console.log('Data generated successfully');
+ 
+        console.log(user1._id);
         mongoose.connection.close();
     } catch (error) {
         console.error(error);

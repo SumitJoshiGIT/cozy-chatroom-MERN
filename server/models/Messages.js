@@ -1,5 +1,4 @@
 const mongoose=require('mongoose');
-
 const AutoIncrement = require('mongoose-sequence')(mongoose)
 const Messages=new mongoose.Schema
 ({   
@@ -14,7 +13,7 @@ const Messages=new mongoose.Schema
      required:true,
      default:"text"
    },
-    uid:{
+   uid:{
         type:mongoose.Schema.Types.ObjectId,
         ref:'Users',
         required:true
@@ -27,8 +26,15 @@ const Messages=new mongoose.Schema
 },
    {timestamps:true}
 )
+Messages.pre('save', function(next) {
+    if (!this.username) {
+      this.username = `user_${this._id}`;
+    }
+    next();
+  });
 
-Messages.plugin(AutoIncrement, { inc_field: 'message_id', start_seq: 0 });
+Messages.index({content:'text'})
+Messages.plugin(AutoIncrement, { inc_field: 'mid', start_seq: 0 });
 
 const MessageModel=mongoose.model('Messages',Messages);
 
