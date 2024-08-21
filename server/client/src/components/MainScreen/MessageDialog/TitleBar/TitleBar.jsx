@@ -4,27 +4,23 @@ import single from '/single.svg'
 import group from '/group.svg'
 export default function (props){
     
-    const {chatID,chatdata,userID,profiles}=useCtx()
-    let chat=chatdata[chatID.current]||{};
+    const {chatID,privateChats,chatdata,userID,profiles}=useCtx()
+    let chat=chatdata[chatID.current.id]||{};
     const [status,setStatus]=useState('')
-    if(chat.type=='private'){
-      let user=undefined;
-      chat.users.forEach((uid)=>{if(uid!=userID.current)user=uid}) 
-      chat={...chat,...(profiles[user]||{})};
-    }
+ 
      useEffect(()=>{
-      setStatus((chat.type=='private')?'private':`${(chat.users&&chat.users.length)} member`)
+      setStatus((chat.type=='group')?`${(chat.users&&chat.users.length)} member`:chat.type)
      
     },[chat])
-   return( <div className="flex sticky shadow-md  p-2 pl-4 justify-content items-center  h-14 bg-white w-full">
+   return( <div className="flex sticky min-w-36 shadow-lg m-2 rounded-lg m-1 p-2   pl-4 justify-content items-center  h-14 bg-white flex">
          <button onClick={()=>{
           props.setDialog((prev)=>(prev+1)%2);}} className="outline-none  border-none rounded-full h-fit w-fit"> 
            <img className=" w-10 h-10 border p-1  rounded-full"
-            src={chat.img||(chat.type=='private')?single:group} style={{backgroundColor:'white'}}>
+            src={chat.img||(chat.type!='group')?single:group} style={{backgroundColor:'white'}}>
            </img>
          </button>        
         <div className="p-2 flex flex-col ">
-         <div className="text-sm font-semibold">{chat.name||"Unnamed"}</div>
+         <div className="text-sm w-36 text-ellipses font-semibold">{chat.name||"Unnamed"}</div>
          <div className="text-xs text-gray-400">{status}
          </div>
         </div>

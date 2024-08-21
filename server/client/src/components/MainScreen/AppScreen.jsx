@@ -8,13 +8,17 @@ const Context=createContext();
 function ChatScreen(props) {
    const [profiles,setProfiles]=useState({}); 
    const userID=useRef(null);
-   const chatID=useRef(null);
+   const chatID=useRef({id:null,type:null});
    const [Messages,setMessages]=useState([]);
    const [chatdata,setChatdata]=useState({});
+   const [queries,setQueries]=useState({})
    const [contacts,setContacts]=useState(new Set());
+   const privateChats=useRef({});
    const scrollable=useRef(null);
-
+ 
    useEffect(()=>{
+  
+
       socket.on("userProfile",(data)=>{
           const id=data._id;
           const obj={};
@@ -24,11 +28,12 @@ function ChatScreen(props) {
       })
       
       socket.on('profile',(data)=>{
+         if(data){
          const id=data._id;      
          const obj={};
          obj[id]=data;
          setProfiles((prev)=>{return{...prev,...obj}});
-        
+         }
       })
       socket.on('addFriend',(data)=>{
           setContacts((prev)=>{prev.add(data._id);return prev})
@@ -50,13 +55,14 @@ function ChatScreen(props) {
    return(
     <Context.Provider value={{userID,profiles,
       chatdata,
+      privateChats,
       setChatdata,
       contacts,
       setMessages,Messages,
       scrollable,
       chatID,
       }}>
-    <div className="h-screen w-screen flex flex-row">
+    <div className="h-screen w-screen flex flex-row overflow-hidden">
     <ChatDialog />
     <MessageDialog/>
    </div>

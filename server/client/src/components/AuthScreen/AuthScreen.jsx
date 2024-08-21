@@ -1,13 +1,10 @@
 
-import Verify from './Verify/Verify';
-import { Outlet, Link } from "react-router-dom";
 import {useState} from 'react'
-import SignIn from './SignIn/SignIn';
-import SignUp from './SignUp/SignUp';
-
+import { Outlet } from 'react-router-dom';
 export default function(props){
+       console.log(true)
       return (
-         <div className="auth-screen">
-                {(props.login)?<SignIn/>:<SignUp/>}
+         <div className="flex h-screen w-screen justify-center items-center">
+                <Outlet/>
          </div>)
      }

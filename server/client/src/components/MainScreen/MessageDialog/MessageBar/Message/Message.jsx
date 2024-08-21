@@ -1,8 +1,8 @@
 import React from "react";
 import { useState,useEffect,useCallback} from "react";
 import Placeholder from "/person.svg"; 
-import { useCtx } from "../../AppScreen";
-import socket from '../../../Socket'
+import { useCtx } from "../../../AppScreen";
+import socket from '../../../../Socket'
 
 export default function (props){
   const {profiles,userID}=useCtx()

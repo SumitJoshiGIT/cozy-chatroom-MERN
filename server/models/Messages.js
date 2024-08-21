@@ -26,12 +26,6 @@ const Messages=new mongoose.Schema
 },
    {timestamps:true}
 )
-Messages.pre('save', function(next) {
-    if (!this.username) {
-      this.username = `user_${this._id}`;
-    }
-    next();
-  });
 
 Messages.index({content:'text'})
 Messages.plugin(AutoIncrement, { inc_field: 'mid', start_seq: 0 });

@@ -1,34 +1,33 @@
-import MessageBar from "./Message/MessageBar/MessageBar";
-import Message from "./Message/Message";
+import MessageBar from "./MessageBar/MessageBar";
+import Message from "./MessageBar/Message/Message";
 import {useRef,useEffect, useCallback, useState, useMemo} from "react";
 import { useCtx } from "../AppScreen";
-import backgroundImage from '/background.jpg';
 import socket from "../../Socket";
+
+import backgroundImage from '/background.jpg';
 
 export default function MessageDialog(props){
     const {Messages,chatID,scrollable}=useCtx()
-    const onScroll=useCallback(function(){
+    const onScroll=useCallback(function(){          
         if(scrollable.current&&scrollable.current.scrollTop<20){              
-              socket.emit('messages',{cid:chatID.current,mid:Messages[0]._id})
-              console.log('scroll',Messages)
+              socket.emit('messages',{cid:chatID.current,mid:Messages[0]?Messages[0]._id:null})
             }
         },[Messages])
 
     const messages=useMemo(()=>{return Messages.map((message,index)=>{
-        return <Message key={message.mid}  item={message} setDialog={props.setDialog} infoPanel={props.infoPanel}/>
+        return <Message key={message._id}  item={message} setDialog={props.setDialog} infoPanel={props.infoPanel}/>
            
     })},[Messages])
 
     return( 
-     <div>  
-      <div ref={scrollable} onScroll={onScroll}
-         className="h-screen w-full overflow-x-hidden  bg-[url('background.jpg')]" style={{backgroundImage: `url(${backgroundImage})`}}>
-        <div  
-        className="pt-8 pb-32 flex flex-col w-full  overflow-y-scroll">
-            {messages}    
+        <div style={{ backgroundImage: `url(${backgroundImage})` }} className="w-full h-screen flex flex-col overflow-y-scroll flex-col">
+        <div   ref={scrollable}
+          onScroll={onScroll}
+          className="pt-16 flex-1 pb-4 flex flex-col overflow-y-scroll flex-1 bg-cover bg-repeat">
+          {messages}
         </div>
-     </div>
-     {(chatID)&&<MessageBar></MessageBar>}
-    </div>
+        {chatID && <MessageBar />}
+      </div>
+   
 )
 }

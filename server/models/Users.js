@@ -48,17 +48,24 @@ const Users=new mongoose.Schema
       },
    {timestamps:true}
 )
+
+
 function randomColor() {
+   
    const letters = '0123456789ABCDEF';
    let color = '#';
-   for (let i = 0; i < 6; i++) {
+   for (let i = 0; i < 6; i++) 
        color += letters[Math.floor(Math.random() * 16)];
-        }
    return color;
 }
+Users.pre('save',function(next){
+   if (!this.username) this.username = `user_${this._id}`;
+   this.color=randomColor();next()
+});
+
 Users.index({name:'text',email:'text',username:'text'})
 Users.plugin(AutoIncrement, { inc_field: 'user_id', start_seq: 0 });
-Users.pre('save',function(next){this.color=randomColor();next()});
+
 
 const UserModel=mongoose.model('Users',Users);
 

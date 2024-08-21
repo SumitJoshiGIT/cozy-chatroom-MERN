@@ -5,7 +5,6 @@ import socket from "../../Socket";
 import Messages from "./Messages";
 import ChatInfo from "./ChatInfo/ChatInfo";
 import UserInfo from "./UserInfo/UserInfo";
-
 const dialogs={
     0:Messages,
     1:ChatInfo,
@@ -18,7 +17,7 @@ const  MessageDialogComponent=React.memo(function MessageDialog({}){
     const {chatID}=useCtx()
     const Component=dialogs[dialog]  
     return( 
-    <div className="w-full overflow-hidden"> 
+    <div  className="flex flex-col h-screen w-full overflow-hidden"> 
      {chatID.current&&<TitleBar setDialog={setDialog}/>}
      {<Component setDialog={setDialog} infoPanel={infoPanel}/>}
    </div>

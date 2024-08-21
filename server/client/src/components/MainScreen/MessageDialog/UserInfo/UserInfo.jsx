@@ -8,7 +8,6 @@ export default function (props){
     const {profiles,contacts,setContacts,userID}=useCtx();
     const fileform=useRef({});
     const [profile,setProfile]=useState(profiles[props.infoPanel.current]||{})
-    console.log(profile)
     useEffect(()=>{
          if(profiles[props.uid]){
            setProfile(profiles[props.uid])

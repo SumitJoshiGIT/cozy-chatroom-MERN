@@ -10,7 +10,7 @@ export default function (props){
     const chatname=useRef('');
     const fileform=useRef({});
     const [chatnameSt,setUsername]=useState('');
-    const [members,setMembers]=useState([]);
+    const [members,setMembers]=useState(new Set());
     return <div className='mt-6'>
     <div className='min-h-64 p-4 flex border-b  flex-col'>
       <div className="text-lg p-1 pl-2  w-fit pr-3 mb-4 font-semibold border-l-2 rounded shadow-sm">Create New Chat</div>
@@ -22,7 +22,8 @@ export default function (props){
         
         <button onClick={()=>{
          fileform.current.name=chatnameSt;
-         fileform.current.members=[];
+         console.log(members.keys())
+         fileform.current.members=[...members.keys()];
          socket.emit('createChat',fileform.current);
          props.setDialog(0)
         }} className="border-2 outline-none w-fit pl-3 pr-3 text-sm bg-gray-300 shadow rounded mt-2">Create</button>

@@ -1,4 +1,4 @@
-import React from "react";
+import React,{useState} from "react";
 
 export default function VerificationScreen(props){
   
@@ -16,15 +16,15 @@ export default function VerificationScreen(props){
   return (
     <div className="center">
      <div className="header">
-        <h2>We have sent you a mail</h2>
+        <h2 className="text-2xl">We have sent you a mail</h2>
      </div>
-     <input placeholder="Enter OTP" className="email-input" type="text"></input>
-     <div>{timer}/180</div>
-     <br></br>
-     <button onClick={verifyOTP} className='gmail-signup'>
+     <input className="border border-2 p-1 rounded-md pl-2 mt-2" placeholder="Enter OTP"  type="text"></input>
+     <div className="text-xs ml-1">{timer}/180</div>
+
+     <button className='bg-black rounded-md mt-2 text-white p-1 text-sm pl-2 pr-2' onClick={verifyOTP} >
         Verify
      </button>
-     <div>Didn't recieve a mail?<a onClick={ResendOTP}>Resend</a></div>
+     <div className="text-sm">Didn't recieve a mail?<a onClick={ResendOTP} className="pl-1">Resend</a></div>
     </div>
   )
 }
