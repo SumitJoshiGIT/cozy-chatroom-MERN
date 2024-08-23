@@ -12,7 +12,7 @@ export default function (props){
       setStatus((chat.type=='group')?`${(chat.users&&chat.users.length)} member`:chat.type)
      
     },[chat])
-   return( <div className="flex sticky min-w-36 shadow-lg m-2 rounded-lg m-1 p-2   pl-4 justify-content items-center  h-14 bg-white flex">
+   return( <div className=" min-w-36 shadow-lg m-3 rounded-lg  p-2   pl-4 justify-content items-center  h-14 bg-white flex">
          <button onClick={()=>{
           props.setDialog((prev)=>(prev+1)%2);}} className="outline-none  border-none rounded-full h-fit w-fit"> 
            <img className=" w-10 h-10 border p-1  rounded-full"

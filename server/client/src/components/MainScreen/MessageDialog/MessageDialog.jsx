@@ -1,4 +1,3 @@
-import TitleBar from "./TitleBar/TitleBar";
 import React,{useRef,useMemo,useEffect, useCallback, useState} from "react";
 import { useCtx } from "../AppScreen";
 import socket from "../../Socket";
@@ -17,9 +16,13 @@ const  MessageDialogComponent=React.memo(function MessageDialog({}){
     const {chatID}=useCtx()
     const Component=dialogs[dialog]  
     return( 
-    <div  className="flex flex-col h-screen w-full overflow-hidden"> 
-     {chatID.current.id&&<TitleBar setDialog={setDialog}/>}
-     {<Component setDialog={setDialog} infoPanel={infoPanel}/>}
+    <div className="p-4 h-screen w-full flex-1">
+     <div  className="flex rounded-lg  flex-col h-full w-full overflow-hidden"> 
+     
+     <div className="rounded-lg flex  h-full p-2">
+       {<Component setDialog={setDialog} infoPanel={infoPanel}/>}
+     </div>
+     </div> 
    </div>
 )
 })

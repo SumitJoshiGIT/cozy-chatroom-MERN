@@ -46,7 +46,7 @@ const ChatDialogComponent = React.memo(function ({}) {
   }, []);
 
   return (
-      <div className="h-screen max-w-xs border-r flex flex-col border-gray-300 bg-white p-2 w-full overflow-hidden ">
+      <div className="h-screen max-w-xs flex flex-col border-gray-300  p-2 w-full overflow-hidden  ">
  
         <Titlebar setDialog={setDialog} />
         {<Component cache={chatCache} setDialog={setDialog} />}

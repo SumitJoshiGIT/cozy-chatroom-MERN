@@ -7,9 +7,6 @@
   font-weight: 400;
 
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -24,6 +21,7 @@
     justify-content: center;
     min-height: 100vh;
     min-width: 100vw;
+    background-image: linear-gradient(to top, #fdcbf1 0%, #fdcbf1 1%, #e6dee9 100%);
 }
 
 a {
@@ -90,17 +88,19 @@ button:focus-visible {
 }
 
 ::-webkit-scrollbar-track {
-  background: blue;
+  color: transparent;
 }
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+ background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 6px;
+  background: rgb(189, 189, 189);
+  opacity:0.2;
+  border-radius: 24px;
+  height: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: black;
 }

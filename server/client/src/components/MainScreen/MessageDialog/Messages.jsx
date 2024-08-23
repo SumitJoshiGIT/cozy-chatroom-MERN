@@ -3,6 +3,7 @@ import Message from "./MessageBar/Message/Message";
 import {useRef,useEffect, useCallback, useState, useMemo} from "react";
 import { useCtx } from "../AppScreen";
 import socket from "../../Socket";
+import TitleBar from "./TitleBar/TitleBar";
 
 import backgroundImage from '/background.jpg';
 
@@ -20,13 +21,16 @@ export default function MessageDialog(props){
     })},[Messages])
 
     return( 
-        <div style={{ backgroundImage: `url(${backgroundImage})` }} className="w-full h-screen flex flex-col overflow-y-scroll flex-col">
+
+        <div style={{ background:'white' }} className="w-full  rounded-xl flex flex-1 overflow-hidden flex-col">
+            {chatID.current.id||<TitleBar setDialog={props.setDialog}/>}
+ 
         <div   ref={scrollable}
           onScroll={onScroll}
-          className="pt-16 flex-1 pb-4 flex flex-col overflow-y-scroll flex-1 bg-cover bg-repeat">
+          className="pt-16  pb-4 flex flex-col overflow-y-scroll flex-1 bg-cover bg-repeat">
           {messages}
         </div>
-        {chatID.current.id && <MessageBar />}
+        {chatID.current.id || <MessageBar />}
       </div>
    
 )

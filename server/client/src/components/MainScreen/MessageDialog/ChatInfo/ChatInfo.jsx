@@ -38,8 +38,8 @@ export default function (){
                     chatname.current.setAttribute('readonly', 'true');
                     socket.emit('updateChat',{cid:chatID,name:chatname.current.value})
                     
-            }} style={{borderColor:chat.color}} className=' word-wrap overflow-hidden text-ellipses max-w-64 border-l-4  mr-1 pl-2 text-bold rounded w-fit text-start  mt-4 text-2xl outline-none' value={chatnameSt} readOnly/>
-            {(admin)?<button onClick={()=>{chatname.current.removeAttribute('readonly');chatname.current.focus()}}><img className='w-4' src={edit}></img></button>:<></>}
+            }} style={{borderColor:chat.color}} className=' word-wrap overflow-hidden text-ellipses min-w-32 border-l-4  mr-1 pl-2 text-bold rounded w-fit text-start  mt-4 text-2xl outline-none' value={chatnameSt} readOnly/>
+            {(admin)?<button onClick={()=>{chatname.current.removeAttribute('readonly');chatname.current.focus()}}><img className='w-8' src={edit}></img></button>:<></>}
           </div>
           
           <div className='  w-full  mt-4 text-gray-400 items-baseline text-base '>
