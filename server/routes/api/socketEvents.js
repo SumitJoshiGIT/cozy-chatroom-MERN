@@ -5,10 +5,14 @@ const path = require("path");
 const xss = require("xss");
 
 async function onConnection(socket, io) {
-  const profile = await models.UsersModel.findById("66c1ca73fc7fd3de92ce38cf");
-  socket.emit("userProfile", profile ? profile : {});
-
+  let profile=null;
+  try{
+  const pid=socket.handshake.session.passport.user._id;
+  profile = await models.UsersModel.findById(pid);
+  }
+  catch(err){} 
   if (profile) {
+    socket.emit("userProfile", profile ? profile : {}); 
     let chats = profile.Chats.map((x) => x.toString());
 
     socket.on("logout", async () => {
@@ -153,13 +157,17 @@ async function onConnection(socket, io) {
     });
 
     socket.on("createChatPrivate", async (stream) => {
-      let user = await models.UsersModel.findById(stream.cid);
+      
+    let user = await models.UsersModel.findById(stream.cid);
+    if(user){  
       const data = new models.ChatsModel({
         users: [...new Set([profile._id, user._id])],
         type: "private",
       });
       const chat = await data.save();
       profile.Chats.push(chat._id);
+      profile.contacts.push(user._id)
+      user.contacts.push(profile._id)
       await profile.save();
       await user.save();
       chat.sender=stream.cid;
@@ -171,8 +179,9 @@ async function onConnection(socket, io) {
           content: stream.content,
           cid: data._id.toString(),
         });
+      }
     });
-
+    
     socket.on("createChat", async (stream) => {
       let owner = profile._id;
       let type = "group";

@@ -2,6 +2,7 @@ const passport=require('passport');
 const bcrypt=require('bcrypt');
 const GoogleStrategy=require('passport-google-oauth2').Strategy;
 const LocalStrategy=require('passport-local').Strategy;
+const CustomStrategy=require('passport-custom').Strategy;
 const Users=require('../../models/Users')
 const sendOTP=require('../../utils/sendMail')
 const {randomBytes}=require('crypto')
@@ -15,57 +16,38 @@ const credentials={
     passReqToCallback   : true
 }
 
-async function ValidateOtp(req, res, next) {       
-       if(!(req.otpHash||req.otpHash.hash))return res.json({status:"notFound",message:"Internal Server Error"});
-       req.session.verification.tries+=1;
-       const OTP=bcrypt.hash(req.body.OTP);
-       if(bcrypt.compare(OTP,req.session.verification.hash)){
-        const user=Users.findOne({email:req.session.verification.email});
-        req.session.passport.user=user;
-        return res.json({status:true,message:"OTP is correct"});
+async function ValidateOtp(req,done) {      
+      const otp=xss(req.body.otp)
+      console.log(otp)
+      if(req.session.otp){
+
+       req.session.otp.tries+=1;
+       const OTP=await bcrypt.hash(otp,10);
+       if((await bcrypt.compare(otp,req.session.otp.hash))||req.session.otp.otp==otp){
+     
+        const user=await Users({email:req.session.otp.email,password:req.session.otp.password});
+        await user.save();
+        console.log("user created")
+        return done(null,{_id:user._id});
        } 
-       return res.json({status:false,message:"OTP is incorrect"}); 
-}
+      return done({status:false,message:"OTP is incorrect"}); 
+      }
+      return done({status:false,message:"OTP has expired"});
+      }
 
-async function ValidateUser(req,res,next){ 
-    if(!req.csrfToken())return res.send({status:false,message:"Csrf Token is either missing or invalid!"})
-    if(length(req.body.password<8))return res.send({status:false,message:"Password character constraint is 8-64."})
-    const email=(/^[\w-]+(?:\.[\w-]+)*@(?:[\w-]+\.)+[a-zA-Z]{2,7}$/.test(req.body.email))
-    const password=/^(?!.*[<>;'"&]).{8,64}$/.test(req.body.password)
-    if(!email)return res.json({status:false,message:"Please enter a valid email"})
-    if(!password)return res.json({status:false,message:"Please enter a valid password"})
-    req.body={email:xss(req.body.email)
-            ,password:bcrypt.hash(xss(req.body.password))
-           ,username:"somename"
-          };
-    next();
-}
 
-async function generateOTP(req,res,next){
-   const OTP=(Math.random()*1000000).toFixed(); 
-   const response=await sendOTP(scaledNumber,req.body.email);
-    if(response.status=="success"){
-        req.session.verification={
-          ...req.body,
-          hash:bcrypt.hash(scaledNumber),
-          tries:0,
-          time:Date.now()
-        };
-        req.json({status:true,message:"OTP generated successfully"})      
-        setTimeout(()=>delete req.session.otpHash,60000);
-    }
-    else return res.json({status:false,message:"Internal Server Error"});
-}
+async function signInCallback(email,password,done) {
+  email=xss(email)
+  password=xss(password)
+  if(/^[\w-]+(?:\.[\w-]+)*@(?:[\w-]+\.)+[a-zA-Z]{2,7}$/.test(email)){}
+  else if(/^(?!.*[<>;'"&]).{8,64}$/.test(password)){}
 
-async function Signup(req,res,next){
-         return generateOTP(req,res,next); 
-    }
-
-async function LocalCallback(email,password,done) {
-  const user=await Users.find({email:email})
+  const user=await Users.findOne({email:email})
   if(user){
-    if(bcrypt.compare(password,user.password)){
-      return done(null,{email:email});
+    console.log("P1")
+  
+    if(await bcrypt.compare(password,user.password)){
+      return done(null,{_id:user._id});
     }
     else return done({ status:false,message:"Passwords do not match",status:false});
   }
@@ -73,7 +55,58 @@ async function LocalCallback(email,password,done) {
 
 };
 
+async function resendOTP(req,res,next){
+  if(req.session.otp){
+    const OTP=((Math.random()*1000000).toFixed()).toString(); 
+    const response=await sendOTP(OTP,req.otp.email);
+    if(response.status){
+      verification={
+        unverified:true,
+        email:email,
+        password:password,
+        hash:await bcrypt.hash(OTP,10),
+        tries:0,
+        time:Date.now()
+       };
+      req.session.otp=verification;
+    return {status:true};
+    }
+    return {status:false}
+  }
+  return {status:false}
+}
 
+async function signUpCallback(req,email,password,done) {
+  email=xss(email)
+  password=xss(password)
+  if(/^[\w-]+(?:\.[\w-]+)*@(?:[\w-]+\.)+[a-zA-Z]{2,7}$/.test(req.body.email)){}
+  else if(/^(?!.*[<>;'"&]).{8,64}$/.test(req.body.password)){}
+
+  const existingUser=await Users.findOne({email:email})
+  if(existingUser){
+    return done({message:"User already exists",status:"already exist"});
+  }
+  const OTP=(Math.random()*1000000).toFixed();
+  console.log(OTP)
+  const response=await sendOTP(OTP,email);
+  if(response){
+       verification={
+         unverified:true,
+         email:email,
+         hash:await bcrypt.hash(OTP,10),
+         password:await bcrypt.hash(password,10),
+         otp:OTP,
+         tries:0,
+         time:Date.now()
+        };
+        req.session.otp=verification;
+        return done(null,false,verification)      
+  
+      }
+   else return res.json({status:false,message:"Internal Server Error"});
+     
+  
+};
 function MessageScript(value){
     const script=(msg)=>{return `<script>
     
@@ -88,7 +121,7 @@ function MessageScript(value){
 
 async function GoogleCallback(accessToken,refreshToken,profile,next) {
           profile=profile.__json;
-          const user=await Users.find({sub:profile.sub})
+          let user=await Users.find({sub:profile.sub})
           profile={
             name:profile.name,
             email:profile.email,
@@ -100,23 +133,25 @@ async function GoogleCallback(accessToken,refreshToken,profile,next) {
             await user.save()
            }
            catch(err){return done(err,null)}; 
-          done(null,profile);
+          done(null,{_id:user._id});
 }
 
+
+passport.use('local-signin',new LocalStrategy( { usernameField: 'email', passwordField: 'password'},signInCallback));
+passport.use('local-signup',new LocalStrategy( { usernameField: 'email', passwordField: 'password',passReqToCallback:true },signUpCallback));
+passport.use('local-otp',new CustomStrategy(ValidateOtp))
+
 passport.serializeUser((profile,done)=>{
-    
   done(null,profile);
 })
 
 passport.deserializeUser(async(profile,done)=>{
-   profile=await Users.findOne(profile);  
-   done(null,profile);
+   const deserialized=await Users.findById(profile._id);  
+   done(null,deserialized);
 });
-
-passport.use('local',new LocalStrategy(LocalCallback));
 passport.use('google',new GoogleStrategy(credentials,GoogleCallback));
 
-module.exports={passport,ValidateUser,ValidateOtp,MessageScript}
+module.exports={passport,ValidateOtp,MessageScript,resendOTP}
 
 
 

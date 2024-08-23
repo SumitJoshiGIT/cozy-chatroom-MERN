@@ -26,7 +26,7 @@ export default function MessageDialog(props){
           className="pt-16 flex-1 pb-4 flex flex-col overflow-y-scroll flex-1 bg-cover bg-repeat">
           {messages}
         </div>
-        {chatID && <MessageBar />}
+        {chatID.current.id && <MessageBar />}
       </div>
    
 )

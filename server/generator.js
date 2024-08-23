@@ -1,5 +1,5 @@
 const { faker } = require('@faker-js/faker');
-const models = require('./exports');
+const models = require('./models/exports');
 const mongoose = require('mongoose');
 
 mongoose.connect('mongodb://localhost:27017/ChatApp');
@@ -24,6 +24,7 @@ const generateData = async () => {
             name:x,
             Chats: [],
             username:x,
+            password:'pass',
             email:`${faker.animal.fish()}@gmail.com`, 
             SettingsID: null,
         });
@@ -32,13 +33,26 @@ const generateData = async () => {
             name: x,
             Chats: [],
             username:x,
+            
+            password:'pass',
             email:`${faker.animal.fish()}@gmail.com`, 
             SettingsID: null,
         });
 
         await user1.save();
         await user2.save();
-
+        for(let i=0;i<10;i++){
+            try{
+            (new Users({
+                name: faker.person.fullName(),
+                Chats: [],
+                username:x,  
+                password:'pass',
+                email:`${faker.animal.fish()}@gmail.com`, 
+                SettingsID: null,
+            })).save();
+        }catch{}
+        }
         // Create chat
         const chat = new Chats({
             group: null,

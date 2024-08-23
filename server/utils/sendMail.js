@@ -28,18 +28,14 @@ async function sendOTP(text,recepient){
       };  
   try{   
    const response=await new Promise((resolve,reject)=>{transporter.sendMail(mailOptions, (error, info) => {
-    if (error) {
-      console.error('Error sending email:', error);
-     reject(error);
-    } else {
-      console.log(info);
-    resolve({ success: true, message: info.response });
-    }
+    if (error)reject(false);
+    else resolve(true);
+    
     })});
   return response;
   }
-  catch(error){return { success: false, error: error }}
+  catch(error){return false}
  
 }
 
-module.exports={sendOTP};
+module.exports=sendOTP;

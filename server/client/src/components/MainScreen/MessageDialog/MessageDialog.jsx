@@ -18,7 +18,7 @@ const  MessageDialogComponent=React.memo(function MessageDialog({}){
     const Component=dialogs[dialog]  
     return( 
     <div  className="flex flex-col h-screen w-full overflow-hidden"> 
-     {chatID.current&&<TitleBar setDialog={setDialog}/>}
+     {chatID.current.id&&<TitleBar setDialog={setDialog}/>}
      {<Component setDialog={setDialog} infoPanel={infoPanel}/>}
    </div>
 )

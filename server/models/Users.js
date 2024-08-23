@@ -5,7 +5,6 @@ const Users=new mongoose.Schema
 ({
    name:{
     type:String,
-    required:true,  
    },
    about:String,
    img:new mongoose.Schema({
@@ -31,9 +30,11 @@ const Users=new mongoose.Schema
    },
    username:{
     type:String,
-    unique:true,
-    required:true
    }, 
+   password:{
+      type:String,
+      required:true
+   },
    contacts:{
       ref:'Users',
       type:[mongoose.Schema.Types.ObjectId]},

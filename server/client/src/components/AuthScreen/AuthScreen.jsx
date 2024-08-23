@@ -1,10 +1,15 @@
 
-import {useState} from 'react'
-import { Outlet } from 'react-router-dom';
+import {useState,createContext, useEffect} from 'react'
+import { Outlet,useNavigate } from 'react-router-dom';
+
 export default function(props){
-       console.log(true)
+      const [authenticated,setAuthenticated]=useState(false)
+      useEffect(()=>{
+       if(authenticated)useNavigate('/app')
+      },[authenticated])
       return (
          <div className="flex h-screen w-screen justify-center items-center">
-                <Outlet/>
-         </div>)
+                <Outlet context={setAuthenticated}/>
+         </div>
+         )
      }
