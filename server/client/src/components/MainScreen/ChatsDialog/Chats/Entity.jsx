@@ -30,6 +30,7 @@ export default function (props){
    const onClick=useCallback((event)=>{
       chatID.current.id=chat._id;
       chatID.current.type=chat.type;
+      
       setMessages(Object.values(messages.current));
       
    })
@@ -84,9 +85,9 @@ export default function (props){
    
 
    
-   return <div className=" mt-5 min-h-16 m-2 shadow-sm flex min-w-62 w-62 overflow-hidden hover:bg-gray-100 p-2 bg-white h-auto w-auto rounded-md" onClick={onClick}>
-         <div className=" h-full flex ">
-           <img className=" min-w-12 w-12 p-1 h-12  rounded-full"
+   return <div className="min-h-16 m-2 shadow-md flex min-w-62 w-62 overflow-hidden hover:bg-gray-100 p-2 bg-white h-auto w-auto rounded-md" onClick={onClick}>
+         <div className=" h-full flex  justify-content items-center">
+           <img className=" min-w-12 w-12 h-12 border  rounded-full"
             src={(chat.img&&chat.img.src)||(chat.type!='group')?single:group} style={{backgroundColor:'white'}}>
            </img>
          </div>

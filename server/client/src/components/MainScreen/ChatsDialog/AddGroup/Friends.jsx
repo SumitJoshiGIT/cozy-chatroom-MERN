@@ -8,7 +8,7 @@ export default function (props){
     const users=new Set(props.members);
     const ref=useRef();
     const onChange=()=>{
-        
+
     } 
 
     
@@ -23,7 +23,7 @@ export default function (props){
     
     return( 
     <>
-    <input ref={ref}  placeholder='Search...' className=" border-b active:outline-none outline-none   rounded  w-full h-8 p-1"  onChange={onChange}/>
+     <input ref={ref}  placeholder='Search' className=" border active:outline-none outline-none shadow-sm   rounded-full  w-full h-8 font-roboto p-4"  onChange={onChange}/>
     <div className="flex flex-wrap w-full max-h-36 overflow-y-scroll">
      {additions}
     </div>    

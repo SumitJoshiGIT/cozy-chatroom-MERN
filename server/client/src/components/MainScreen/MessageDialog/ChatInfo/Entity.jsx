@@ -8,9 +8,9 @@ import promo from '/promote.svg';
 import demo from '/demote.svg'
 export default function (props){
    const {profiles}=useCtx();
-   const contact=profiles[props.id]
+   const contact=profiles[props.id]||{}
    const owner=(props.chat.owner===props.id);
-   const admin=owner||(props.id in props.chat.admins);
+   const admin=owner||(props.id in (props.chat.admins||[]));
    
    const remove=useCallback(()=>{
      props.setMembers(prev=>new Set([...prev].filter(item=>item!==props.id)))

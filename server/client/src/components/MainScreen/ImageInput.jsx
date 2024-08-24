@@ -6,7 +6,7 @@ export default function(props){
     const file=useRef();
 
 return  <div className='border-1 w-fit h-fit flex items-baseline rounded-full'>
-      <img className=" p-1 h-36 w-36  border rounded-full" src={src}></img> 
+      <img className="  h-36 w-36  border rounded-full" src={src}></img> 
        <div>
        <input  accept='image/*' onChange={(event)=>{
            const file=(event.target.files[0]);
@@ -37,7 +37,7 @@ return  <div className='border-1 w-fit h-fit flex items-baseline rounded-full'>
             };   
            }}}} ref={file} className="text-xs w-0 h-0" type='file'/>
             
-       {(props.uneditable)?'':<button className="outline-none active:outline-none" onClick={()=>{file.current.click()}}><img className='w-4' src={edit}></img></button>}
+       {(props.uneditable)?'':<button className="outline-none active:outline-none relative right-5 bottom-1" onClick={()=>{file.current.click()}}><img className='w-4' src={edit}></img></button>}
        </div>
       </div>
       }

@@ -21,16 +21,17 @@ export default function MessageDialog(props){
     })},[Messages])
 
     return( 
-
-        <div style={{ background:'white' }} className="w-full  rounded-xl flex flex-1 overflow-hidden flex-col">
-            {chatID.current.id||<TitleBar setDialog={props.setDialog}/>}
- 
+      <div style={{ background:'white' }} className="w-full p-4 rounded-xl flex flex-1 overflow-hidden flex-col items-center">
+        
+        {chatID.current.id&&<TitleBar setDialog={props.setDialog}/>}
+        <div className="flex h-full flex-col w-full max-w-xl">     
         <div   ref={scrollable}
           onScroll={onScroll}
           className="pt-16  pb-4 flex flex-col overflow-y-scroll flex-1 bg-cover bg-repeat">
           {messages}
         </div>
-        {chatID.current.id || <MessageBar />}
+        {chatID.current.id && <MessageBar />}
+      </div>
       </div>
    
 )

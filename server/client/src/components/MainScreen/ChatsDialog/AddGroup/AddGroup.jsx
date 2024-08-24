@@ -15,9 +15,9 @@ export default function (props){
     <div className='min-h-64 p-4 flex border-b  flex-col'>
        <ImageInput src={group} fileform={fileform} callback={()=>{}} editable={true}/>
       <div className='flex flex-col w-full'>
-        <input  placeholder="Chatname..." ref={chatname} 
+        <input className="max-w-64  mr-1 pl-3 shadow  border-b border-b-gray-300  w-fit mt-4  text-sm outline-none border color-gray-500  bg-gray-100 rounded-full  p-2 " placeholder="Chatname" ref={chatname} 
         onChange={(event)=>setUsername(event.target.value)} 
-        onBlur={()=>{}}  className='max-w-64  mr-1 pl-2 p-1 border-b border-b-gray-300 rounded-sm w-fit mt-4  text-sm outline-none' value={chatnameSt} required/>
+        onBlur={()=>{}}   value={chatnameSt} required/>
         
         <button onClick={()=>{
          fileform.current.name=chatnameSt;
@@ -25,9 +25,9 @@ export default function (props){
          fileform.current.members=[...members.keys()];
          socket.emit('createChat',fileform.current);
          props.setDialog(0)
-        }} className="border-2 outline-none w-fit pl-3 pr-3 text-sm bg-gray-200 shadow rounded mt-2">Create</button>
+        }} className="max-w-64  mr-1 pl-2 pr-2  shadow   border-b-gray-300  w-fit mt-4  text-sm outline-none border color-gray-500  bg-white rounded-lg  p-1">Create</button>
       </div>
-      <div className="text-sm p-1 pl-2  w-fit pr-3 mb-4 mt-4 font-semibold border-l-2 rounded shadow-sm">Add Members</div>
+      <div className="text-sm p-1 pl-2 bg-white w-fit pr-3 mb-4 mt-4 font-semibold border-l-2 rounded shadow-sm">Add Members</div>
        <Friends members={members} setMembers={setMembers}/>     
     </div>
 </div> 

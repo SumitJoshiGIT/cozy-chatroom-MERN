@@ -15,10 +15,10 @@ export default function (props){
    },[props.members])
    
 
-   return (contact)?<div className="  m-1 shadow-sm flex  hover:bg-gray-100 p-1 bg-white text-xs h-fit w-auto rounded-md">
+   return (contact)?<div className="  m-1 shadow-sm flex   hover:bg-gray-100 p-1 bg-white text-xs h-fit w-auto rounded-full">
          <div className="w-fit rounded-md ">
            <div className="flex justify-center items-baseline ">
-             <div className="truncate text-sm  text-lg font-semibold">{contact.name||"Unnamed"}</div>
+             <div className="truncate text-xs  font-semibold">{contact.name||"Unnamed"}</div>
            </div>
            <div className="text-gray-400 text-base">
            </div>
