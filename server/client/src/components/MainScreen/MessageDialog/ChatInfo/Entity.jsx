@@ -1,5 +1,4 @@
 import {useRef,useState,useEffect, useCallback} from "react";
-import socket from '../../../Socket'
 import { useCtx } from "../../AppScreen";
 import single from '/single.svg';
 import group from '/group.svg';
@@ -7,24 +6,24 @@ import remo from '/remove.svg'
 import promo from '/promote.svg';
 import demo from '/demote.svg'
 export default function (props){
-   const {profiles}=useCtx();
+   const {profiles,socket}=useCtx();
    const contact=profiles[props.id]||{}
    const owner=(props.chat.owner===props.id);
    const admin=owner||(props.id in (props.chat.admins||[]));
-   
+   console.log("ack")   
    const remove=useCallback(()=>{
      props.setMembers(prev=>new Set([...prev].filter(item=>item!==props.id)))
-     socket.emit('removeUser',{chatID:props.chatID, userID:props.id})
+     socket.current.emit('removeUser',{chatID:props.chatID, userID:props.id})
    },[])
 
    const promote=useCallback(()=>{
     props.setMembers(prev=>new Set([...prev].filter(item=>item!==props.id)))
-    socket.emit('promoteUser',{chatID:props.chatID, userID:props.id})
+    socket.current.emit('promoteUser',{chatID:props.chatID, userID:props.id})
   },[])
 
   const demote=useCallback(()=>{
     props.setMembers(prev=>new Set([...prev].filter(item=>item!==props.id)))
-    socket.emit('demoteUser',{chatID:props.chatID, userID:props.id})
+    socket.current.emit('demoteUser',{chatID:props.chatID, userID:props.id})
   },[]) 
     
    return <div className=" mt-2 min-h-16 m-1 shadow-sm flex min-w-62 hover:bg-gray-100 p-2 bg-white h-auto w-auto rounded-md" >

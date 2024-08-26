@@ -1,4 +1,3 @@
-import socket from "../../../Socket"
 import {useRef,useEffect, useState} from "react";
 import group from '/group.svg'
 import edit from '/edit.svg'
@@ -6,7 +5,7 @@ import Friends from "./Friends";
 import ImageInput from "../../ImageInput";
 import { useCtx } from "../../AppScreen";
 export default function (props){
-
+    const {socket}=useCtx();
     const chatname=useRef('');
     const fileform=useRef({});
     const [chatnameSt,setUsername]=useState('');
@@ -23,7 +22,7 @@ export default function (props){
          fileform.current.name=chatnameSt;
          console.log(members.keys())
          fileform.current.members=[...members.keys()];
-         socket.emit('createChat',fileform.current);
+         socket.current.emit('createChat',fileform.current);
          props.setDialog(0)
         }} className="max-w-64  mr-1 pl-2 pr-2  shadow   border-b-gray-300  w-fit mt-4  text-sm outline-none border color-gray-500  bg-white rounded-lg  p-1">Create</button>
       </div>

@@ -1,16 +1,16 @@
 import React,{useRef,useMemo,useEffect, useCallback, useState} from "react";
 import { useCtx } from "../../AppScreen";
-import socket from "../../../Socket";
 import ImageInput from "../../ImageInput";
 import single from '/single.svg'
 import edit from '/edit.svg'
+import close from '/close.svg'
 export default function (props){
-    const {profiles,contacts,setContacts,userID}=useCtx();
+    const {profiles,contacts,setContacts,setMessageDialog,socket,userID}=useCtx();
 
     const about = useRef();
     const chatname = useRef();
     const fileform=useRef({});
-    const [profile,setProfile]=useState(profiles[props.infoPanel.current]||{})
+    const [profile,setProfile]=useState(profiles[props.infoPanel.current||userID.current]||{})
     const [aboutSt, setAbout] = useState(profile.about || "null");
     const [chatnameSt, setName] = useState(profile.name || ""); 
     const [username, setUsername] = useState(profile.users || []);
@@ -27,16 +27,21 @@ export default function (props){
          }
     },[profiles])
 
-    const admin=userID.current==props.infoPanel.current
+    const admin=userID.current==profile._id
     return     <div className="mt-6 rounded-xl shadow  bg-white flex-1 flex-col flex">
+    <button onClick={()=>setMessageDialog(0)} className="w-fit fixed m-4 h-fit rounded-full shadow-md ">
+        <img className="w-3 h-3" src={close}/>
+      </button>
     <div className="bg-gray-200 pl-10 w-full h-44 ">
+
       <div className="relative top-20 border-1 w-fit h-fit flex rounded-full">
+      
         <ImageInput
           src={profile.img ? profile.img.src : single}
           fileform={fileform}
           uneditable={!admin}
           callback={() => {
-            socket.emit("updateChat", {
+            socket.current.emit("updateChat", {
               cid: profile._id,
               img: fileform.current,
             });
@@ -51,7 +56,7 @@ export default function (props){
           onChange={(event) => setName(event.target.value)}
           onBlur={() => {
             chatname.current.setAttribute("readonly", "true");
-            socket.emit("updateChat", {
+            socket.current.emit("updateChat", {
               cid: chatID,
               name: chatname.current.value,
             });
@@ -79,7 +84,7 @@ export default function (props){
           onChange={(event) => setUsername(event.target.value)}
           onBlur={() => {
             chatname.current.setAttribute("readonly", "true");
-            socket.emit("updateChat", {
+            socket.current.emit("updateChat", {
               cid: chatID,
               name: chatname.current.value,
             });
@@ -101,7 +106,7 @@ export default function (props){
           }}
           onBlur={() => {
             about.current.setAttribute("readonly", "true");
-            socket.emit("updateChat", {
+            socket.current.emit("updateChat", {
               cid: chatID,
               about: about.current.value,
             });

@@ -5,8 +5,7 @@ import AuthScreen from './components/AuthScreen/AuthScreen';
 import SignUp from './components/AuthScreen/SignUp/SignUp';
 import SignIn from './components/AuthScreen/SignIn/SignIn';
 import Verify from './components/AuthScreen/Verify/Verify';
-import { useContext,createContext } from 'react';
-import { get } from './components/Axios';
+
 
 //import App from './components/MainApp';
 const router=createBrowserRouter([
@@ -26,16 +25,22 @@ const router=createBrowserRouter([
     {
       path:"/app",
       element:<ChatScreen/>
-    },]
+    },
+    {
+      path:"/",
+      element:<ChatScreen/>
+    },
+  
+  ]
 )
 
 function App() {
   const token=useRef('')
-  useEffect(()=>{
+ /* useEffect(()=>{
     setInterval(async()=>{ 
        await get('/auth/token').then(res=>{token.current=res.token})
     },6400)
-},[]) 
+},[])*/ 
   return (
    <RouterProvider router={router}/>
  

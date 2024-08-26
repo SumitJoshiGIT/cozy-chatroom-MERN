@@ -2,35 +2,49 @@ import MessageBar from "./MessageBar/MessageBar";
 import Message from "./MessageBar/Message/Message";
 import {useRef,useEffect, useCallback, useState, useMemo} from "react";
 import { useCtx } from "../AppScreen";
-import socket from "../../Socket";
 import TitleBar from "./TitleBar/TitleBar";
-
-import backgroundImage from '/background.jpg';
-
+import background from '/background.jpg';
 export default function MessageDialog(props){
-    const {Messages,chatID,scrollable}=useCtx()
+    const {Messages,chatID,scrollable,socket}=useCtx()
+    const [reply,setReply]=useState()
     const onScroll=useCallback(function(){          
         if(scrollable.current&&scrollable.current.scrollTop<20){              
-              socket.emit('messages',{cid:chatID.current,mid:Messages[0]?Messages[0]._id:null})
-            }
+             // socket.current.emit('messages',{cid:chatID.id,mid:Messages[chatID.id][0]?Messages[0]._id:null})
+        }
         },[Messages])
+    
+   
+    const messages=useMemo(()=>{
 
-    const messages=useMemo(()=>{return Messages.map((message,index)=>{
-        return <Message key={message._id}  item={message} setDialog={props.setDialog} infoPanel={props.infoPanel}/>
-           
-    })},[Messages])
-
-    return( 
-      <div style={{ background:'white' }} className="w-full p-4 rounded-xl flex flex-1 overflow-hidden flex-col items-center">
+      const m=Messages[chatID.id]
+      let pre=null;
+      return m?Object.values(m).map((message)=>{
         
-        {chatID.current.id&&<TitleBar setDialog={props.setDialog}/>}
-        <div className="flex h-full flex-col w-full max-w-xl">     
+      const M=<Message 
+       key={message._id} 
+       item={message} 
+       setDialog={props.setDialog}
+       setReply={setReply}
+       infoPanel={props.infoPanel} 
+       reply_to={m[message.reply_to]} 
+       pre={pre}
+       />
+       pre=message.uid;
+       return M;
+    }):null;
+  
+  },[Messages,chatID])
+    // console.log("ff",messageCache,chatID.id)
+    return(
+      <div style={{backgroundImage:`url(${background})`,backgroundRepeat:true }} className="w-full shadow-lg p-0 rounded-xl flex flex-1 overflow-hidden flex-col items-center">        
+        {chatID.id&&<TitleBar setDialog={props.setDialog}/>}
+        <div className="flex backdrop-invert  flex-1 overflow-hidden  flex-col w-full max-w-xl">     
         <div   ref={scrollable}
           onScroll={onScroll}
-          className="pt-16  pb-4 flex flex-col overflow-y-scroll flex-1 bg-cover bg-repeat">
+          className="mt-4  pb-4 pr-5 pl-5 flex flex-col overflow-y-scroll flex-1 bg-cover bg-repeat">
           {messages}
         </div>
-        {chatID.current.id && <MessageBar />}
+        {chatID.id&&<MessageBar setReply={setReply} reply={reply}/>}
       </div>
       </div>
    

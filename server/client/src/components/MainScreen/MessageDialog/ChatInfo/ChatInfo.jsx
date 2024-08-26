@@ -2,40 +2,48 @@ import single from "/single.svg";
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { useCtx } from "../../AppScreen.jsx";
 import edit from "/edit.svg";
-import socket from "../../../Socket.js";
 import ImageInput from "../../ImageInput.jsx";
-import Entity from "./Entity.jsx";
-export default function () {
-  const { chatdata, privateChats, chatID, profiles, userID } = useCtx();
+import Members from "./Members.jsx";
+import Media from './Media.jsx'
+import close from '/close.svg'
+const Tabs={
+  1:Members,
+  0:Media
+}
+export default function (props) {
+  const { chatdata, privateChats,socket,setMessageDialog, chatID, profiles, userID } = useCtx();
   const about = useRef();
   const chatname = useRef();
-  
-  let chat = chatdata[chatID.current.id] || {};
+  let chat = chatdata[chatID.id] || {};
   const [aboutSt, setAbout] = useState(chat.about || "null");
   const [chatnameSt, setName] = useState(chat.name || "");
-  const [members, setMembers] = useState(chat.users || []);
   const [username, setUsername] = useState(chat.users || []);
-  const [active,setActive]=useState(0);
+  const [active,setActive]=useState(Number(!chat.type==='group'));
   useEffect(() => {
     setAbout(chat.about || "null");
     setName(chat.name || "");
-    setMembers(chat.users || "");
     setUsername(chat.username || '');  
+    setActive(0)
   }, [chat]);
   const admin =
     userID.current in (chat.admins || []) || userID.current == chat.owner;
   const fileform = useRef({});
-
+  const ActiveTab=Tabs[active];
+  
   return (
-    <div className="mt-6 rounded-xl shadow  bg-white flex-1 flex-col flex">
-      <div className="bg-gray-200 pl-10 w-full h-44 ">
+    <div className="mt-0 rounded-xl shadow  bg-white flex-1 flex-col flex">
+      <button onClick={()=>setMessageDialog(0)} className="w-fit fixed m-3 h-fit rounded-full shadow-md">
+        <img className="w-3 h-3" src={close}/>
+      </button>
+      <div className="bg-gray-200 rounded-t-xl shadow-sm pl-10 w-full h-44 ">
+      
         <div className="relative top-20 border-1 w-fit h-fit flex rounded-full">
           <ImageInput
             src={chat.img ? chat.img.src : single}
             fileform={fileform}
             uneditable={!admin}
             callback={() => {
-              socket.emit("updateChat", {
+              socket.current.emit("updateChat", {
                 cid: chat._id,
                 img: fileform.current,
               });
@@ -43,14 +51,14 @@ export default function () {
           />
         </div>
       </div>
-      <div className="min-h-64 mt-8 flex  p-4 flex-col">
+      <div className="h-fit pb-6 mt-8 flex  p-4 flex-col">
         <div className=" flex font-bold w-full items-baseline">
           <input
             ref={chatname}
             onChange={(event) => setName(event.target.value)}
             onBlur={() => {
               chatname.current.setAttribute("readonly", "true");
-              socket.emit("updateChat", {
+              socket.current.emit("updateChat", {
                 cid: chatID,
                 name: chatname.current.value,
               });
@@ -78,7 +86,7 @@ export default function () {
             onChange={(event) => setUsername(event.target.value)}
             onBlur={() => {
               chatname.current.setAttribute("readonly", "true");
-              socket.emit("updateChat", {
+              socket.current.emit("updateChat", {
                 cid: chatID,
                 name: chatname.current.value,
               });
@@ -100,7 +108,7 @@ export default function () {
             }}
             onBlur={() => {
               about.current.setAttribute("readonly", "true");
-              socket.emit("updateChat", {
+              socket.current.emit("updateChat", {
                 cid: chatID,
                 about: about.current.value,
               });
@@ -125,31 +133,17 @@ export default function () {
         </div>
        </div>
        <div>  
-        {chat.type != "group" ? (
+        {(
           <div>
             <div className=" items-center flex w-full shadow-md text-gray-500">
-              <button className="flex-1  p-2 max-w-32 outline-none    font-semibold pb-1 pt-1 rounded-none  ">Members</button>
-              <button className="flex-1 p-2 max-w-32 outline-none   font-semibold pt-1 pb-1 rounded-none ">Media</button>
-              <button className=" max-w-32 flex-1  outline-none   font-semibold rounded-none p-2 pt-1 pb-1">Permissions</button> 
-            </div>
-            <div className=" overflow-y-scroll w-auto max-w-82">
-              {new Array(...members).map((data) => {
-                return (
-                  <Entity
-                    key={data}
-                    members={members}
-                    admin={admin}
-                    setMembers={setMembers}
-                    id={data}
-                    chat={chat}
-                  />
-                );
-              })}
+              {chat.type == "group"&&<button className="flex-1  p-2 max-w-32 outline-none    font-semibold pb-1 pt-1 rounded-none  " onClick={()=>setActive(1)}>Members</button>}
+              <button className="flex-1 p-2 max-w-32 outline-none   font-semibold pt-1 pb-1 rounded-none " onClick={()=>setActive(0)}>Media</button>
+              {admin&&<button className=" max-w-32 flex-1  outline-none   font-semibold rounded-none p-2 pt-1 pb-1" onClick={()=>setActive(2)}>Permissions</button>} 
             </div>
           </div>
-        ) : (
-          <></>
-        )}
+        ) }
+       {chat&&<ActiveTab chat={chat} admin={admin}/>}
+  
       </div>
     </div>
   );

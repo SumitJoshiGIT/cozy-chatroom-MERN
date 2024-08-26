@@ -1,5 +1,4 @@
 import {useRef,useState,useEffect, useCallback} from "react";
-import socket from '../../../Socket'
 import { useCtx } from "../../AppScreen";
 import single from '/single.svg';
 import group from '/group.svg';
@@ -12,7 +11,7 @@ export default function (props){
    })
    
 
-   return (contact)?<div className=" mt-2  m-1 shadow-sm flex min-w-62 hover:bg-gray-100 p-3 bg-white h-auto w-auto rounded-md" onClick={onClick}>
+   return (contact)?<div className=" mt-2 mb-3 m-1 shadow-sm flex min-w-62 hover:bg-gray-100 p-3 bg-white h-auto w-auto rounded-md" onClick={onClick}>
          <div className=" h-full flex ">
            <img className=" w-12 h-8 border rounded-full"
             src={(contact.img&&contact.img.src)||single} style={{backgroundColor:'white'}}>

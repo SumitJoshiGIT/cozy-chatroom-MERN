@@ -20,7 +20,7 @@ async function ValidateOtp(req,done) {
       const otp=xss(req.body.otp)
       console.log(otp)
       if(req.session.otp){
-
+        if(req.session.otp.tries>3)return done({status:false,message:"Tries exhausted"});
        req.session.otp.tries+=1;
        const OTP=await bcrypt.hash(otp,10);
        if((await bcrypt.compare(otp,req.session.otp.hash))||req.session.otp.otp==otp){

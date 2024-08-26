@@ -1,5 +1,4 @@
 import {useRef,useState,useEffect, useCallback} from "react";
-import socket from '../../../Socket'
 import { useCtx } from "../../AppScreen";
 import single from '/single.svg';
 import group from '/group.svg';

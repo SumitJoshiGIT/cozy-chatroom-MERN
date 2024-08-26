@@ -1,6 +1,5 @@
 import { useState,useEffect,useRef, useCallback, useMemo} from "react";
 import Entity from "./Entity";
-import socket from "../../../Socket"
 import { useCtx } from "../../AppScreen";
 import EntityTwo from "./EntityTwo";
 export default function (props){
