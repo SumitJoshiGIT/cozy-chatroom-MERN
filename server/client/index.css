@@ -21,7 +21,7 @@
     justify-content: center;
     min-height: 100vh;
     min-width: 100vw;
-    background-image: linear-gradient(to top, #a18cd1 0%, #fbc2eb 100%);
+    background-image: linear-gradient(to top, #a18cd1 90%, #fbc2eb 100%);
 }
 .gradient-1{
   background-image: linear-gradient(to top, #9795f0 0%, #fbc8d4 100%);}

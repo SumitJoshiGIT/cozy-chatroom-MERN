@@ -62,7 +62,7 @@ app.use(authRouter);
 io.on('connection',(socket)=>onConnection(socket,io));
 io.on('disconnected',onDisconnection);
 
-app.get('*',(req, res) => {
+app.get('/',(req, res) => {
  console.log('user',req.user,req.isAuthenticated())
   return res.sendFile(path.join(__dirname, 'client','dist','index.html'));
 });

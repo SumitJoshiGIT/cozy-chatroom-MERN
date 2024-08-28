@@ -4,9 +4,20 @@ const maxSize=2*1024*1024;
 export default function(props){ 
     const [src,setSrc]=useState(props.src);
     const file=useRef();
-
-return  <div className='border-1 w-fit h-fit flex items-baseline rounded-full'>
-      <img className="  h-36 w-36  border rounded-full" src={src}></img> 
+    const ref=useRef();
+return  <div className='border-1 overflow-clip w-fit h-36 flex items-baseline rounded-full'>
+       <div onMouseEnter={()=>{if(!props.uneditable)ref.current.style.display='flex'}} onMouseLeave={()=>{
+            ref.current.style.display='none'
+            
+            }}
+            className="h-36 w-36">
+        <img  className="  h-36 w-36 bg-white border rounded-full" src={src}/> 
+        <div ref={ref} className="bg-transparent backdrop-blur-lg flex hidden  justify-center relative transition-3s bottom-1/2 items-center opacity-60 h-1/2 rounded-b-full w-36 ">
+        <button className="outline-none active:outline-none" onClick={()=>{file.current.click()}}>
+        <img className='w-8' src={edit}></img></button>
+      
+        </div>
+       </div>
        <div>
        <input  accept='image/*' onChange={(event)=>{
            const file=(event.target.files[0]);
@@ -37,7 +48,7 @@ return  <div className='border-1 w-fit h-fit flex items-baseline rounded-full'>
             };   
            }}}} ref={file} className="text-xs w-0 h-0" type='file'/>
             
-       {(props.uneditable)?'':<button className="outline-none active:outline-none relative right-5 bottom-1" onClick={()=>{file.current.click()}}><img className='w-4' src={edit}></img></button>}
+       
        </div>
       </div>
       }

@@ -12,7 +12,7 @@ export default function (props) {
   }, []);
   const src = profile.img ? profile.img.src : single;
   return (
-    <div className="text-xl  rounded-xl mt-1 ml-2 p-1 flex pr-3  pl-5  gradient-2 justify-content items-center">
+    <div className="text-xl  rounded-xl mt-1 ml-2 p-1 h-fit flex pr-3  pl-5  gradient-2 justify-content items-center">
       <span style={{fontFamily:"Pacifico,cursive"}} className="mr-2">Lavender</span>
       <div className="w-full  flex justify-end">
         <div className='mr-2 overflow-hidden' style={{ display:(dropdown==down)?"flex":"none"}}>

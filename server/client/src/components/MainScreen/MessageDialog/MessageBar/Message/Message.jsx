@@ -8,16 +8,22 @@ import reply from "/reply.svg";
 import copy from "/copy.svg";
 import del from "/delete.svg";
 export default function (props) {
-  const { profiles, userID, socket, messageCache } = useCtx();
+  const { profiles,db, userID, socket, messageCache } = useCtx();
   const contextref = useRef();
   const messageItem = props.item;
+  if(!messageItem.status){
+    messageItem.status ="✔";
+    if(db)db.transaction("messages",'readwrite').objectStore('messages').put(messageItem);
+  }
   const profile = profiles[messageItem.uid] || {};
   const time = new Date(messageItem.updatedAt);
   const flag = messageItem.uid == userID.current;
-
+   useEffect(()=>{
+    if(messageItem.status=='⧖')(socket.current.emit('sendMessage',{cid:messageItem._id,content:messageItem.content,replace:messageItem._id,reply:messageItem.reply_to}))
+   },[])
   useEffect(() => {
     if (!profiles[messageItem.uid]) {
-      socket.current.emit("getProfile", { uid: messageItem.uid });
+      socket.current.emit("getProfile",{uid: messageItem.uid });
     }
   }, [profiles[messageItem.uid]]);
 
@@ -94,14 +100,14 @@ export default function (props) {
           {props.reply_to ? (
             <div className="h-4 bg-white w-full">reply_to</div>
           ) : null}
-          <pre className="h-fit text-sm flex-1 text-justify text-sans">{messageItem.content}</pre>
+          <pre style={{fontFamily:'system-ui'}} className="h-fit text-sm flex-1 text-justify text-sans">{messageItem.content}</pre>
          
 
           <div className="float-right  sticky w-fit flex ml-1 h-fit flex-wrap items-end  text-gray-400 text-xs">
             <div className=" text-grey">
               {time.getHours()}:{time.getMinutes()}{" "}
             </div>
-            <div className="text-xs ml-1">{messageItem.status || "✔"}</div>
+            <div className="text-xs ml-1">{messageItem.status}</div>
           </div>
           </div> 
           

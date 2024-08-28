@@ -5,7 +5,7 @@ import add from '/add.svg'
 import menu from "/options.svg"
 
 export default function (props){
-    const {profiles,userID}=useCtx();
+    const {profiles,userID,setMessageDialog}=useCtx();
     const profile=profiles[userID.current]||{}
     const onClick=useCallback(function(){
         props.setDialog((prev)=>prev?0:1);
@@ -24,7 +24,7 @@ export default function (props){
           {props.style?null:<h1 className="text-xl font-bold opacity-70 font-roboto">Messages</h1>}
           </div>
          <button className="rounded-full  outline-none border-none focus:outline-none focus:border-none" onClick={()=>{
-            props.setDialog((prev)=>((prev==2)?0:2))
+            setMessageDialog(4)
          }} >
             <img className=" h-6  rounded-full" src={add}/>
          </button>

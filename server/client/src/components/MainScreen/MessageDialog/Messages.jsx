@@ -15,7 +15,6 @@ export default function MessageDialog(props){
     
    
     const messages=useMemo(()=>{
-
       const m=Messages[chatID.id]
       let pre=null;
       return m?Object.values(m).map((message)=>{
@@ -38,7 +37,7 @@ export default function MessageDialog(props){
     return(
       <div style={{backgroundImage:`url(${background})`,backgroundRepeat:true }} className="w-full shadow-lg p-0 rounded-xl flex flex-1 overflow-hidden flex-col items-center">        
         {chatID.id&&<TitleBar setDialog={props.setDialog}/>}
-        <div className="flex backdrop-invert  flex-1 overflow-hidden  flex-col w-full max-w-xl">     
+        <div className="flex backdrop-invert rounded-lg flex-1 overflow-hidden  flex-col w-full max-w-xl">     
         <div   ref={scrollable}
           onScroll={onScroll}
           className="mt-4  pb-4 pr-5 pl-5 flex flex-col overflow-y-scroll flex-1 bg-cover bg-repeat">

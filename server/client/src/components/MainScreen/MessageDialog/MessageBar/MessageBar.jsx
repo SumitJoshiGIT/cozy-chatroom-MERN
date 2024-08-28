@@ -2,12 +2,20 @@ import React, { useMemo } from "react";
 import { useState,useRef,useEffect} from "react";
 import { useCtx }  from "../../AppScreen";
 import Message from './Message/Message';
+
 import send from '/send.svg';
 import reply from '/reply.svg';
 const MessageBar=React.memo((props)=>{
-      const [message, setMessage] = useState("");
+  const {setMessages,db,scrollable,profiles,userID,chatID,socket}=useCtx()
+        
+  const [message,setMessage] = useState("");
       const ref=useRef(null);
-      const {setMessages,Messages,scrollable,userID,chatID,socket}=useCtx()
+      let [user,setUser]=useState(profiles[userID.current]);
+      useEffect(()=>{
+        setUser(profiles[userID.current])
+      },[profiles]
+      );
+      console.log(user,userID.current)
       async function SendMessage(event){
               event.preventDefault();
               const id=new Date().toUTCString();
@@ -22,17 +30,22 @@ const MessageBar=React.memo((props)=>{
                 updatedAt:new Date(),
                 status:'⧖'
               };
-               setMessages((prev)=>{
+              if(db)db.transaction("messages","readwrite").objectStore("messages").put(msg);
+              setMessages((prev)=>{
                    const obj={...prev};
                    obj[chatID.id]={...(obj[chatID.id]||{}),...{[msg._id]:msg}};
                    return obj;                              
                 });
-              socket.current.emit((chatID.type=='user')?'createChatPrivate':'sendMessage',{cid:chatID.id,content:message,replace:id,reply:props.reply&&props.reply[0]._id})
+              socket.current.emit((chatID.type=='user')?'createChatPrivate':'sendMessage',{cid:chatID.id,content:message,replace:id,reply:msg.reply})
+              console.log(msg)
               setMessage("");
+             
               if(reply)props.setReply()
               scrollable.current.scrollTo(0,scrollable.current.scrollHeight);
             }
-
+        useEffect(()=>{
+         if(ref.current)ref.current.style.height='auto'
+        },[message])
         const replyTo=useMemo(()=>{
         if(props.reply){ 
           console.log(props.reply)
@@ -54,12 +67,17 @@ const MessageBar=React.memo((props)=>{
         else return null;
       },[props.reply])
 
-      return (
-      <div className=" m-4 overflow-x-hidden shadow-md p-1 rounded-lg ">          
-          {replyTo}
-        <div className="p-1 rounded-md  bg-gray-100 w-full flex items-end">
+      return( 
+      <div className=" m-4 flex justify-center items-center bg-transparent overflow-x-hidden  shadow-md p-1 rounded-lg ">          
+        {replyTo}
+        {(user&&user.Chats.includes(chatID.id))?
+        <div className="p-1 rounded-md shadow-md  bg-gray-100 w-full flex items-end">
          <textarea rows='1' onKeyDown={(event)=>{
-            if(event.ctrlKey&&event.key=='Enter')SendMessage(event);
+          if(event.ctrlKey&&event.key=='Enter'){
+            SendMessage(event);
+            ref.current.style.height='auto';
+               
+          }
             }} ref={ref} onInput={function(){
           ref.current.style.height='auto';
           
@@ -68,8 +86,12 @@ const MessageBar=React.memo((props)=>{
          </textarea>
          <img  src={send} className=" w-10 mb-2 h-6 " onClick={SendMessage}></img>
         </div>
+        :null
+        }
       </div>
       )
+      
+    
 
 });
 export default MessageBar;

@@ -23,6 +23,12 @@ const Messages=new mongoose.Schema
         ref:'Messages',
         default:null
     },
+    status:{
+        type:String,
+        default:'✔',
+        enum:['✔','✔✔']  // pending, seen, read status for messages in a chat room.
+     },
+    
 },
    {timestamps:true}
 )

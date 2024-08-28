@@ -10,18 +10,26 @@ import leave from '/leave.svg'
 
 export default function (props){
     
-    const {chatID,db,chatdata,socket}=useCtx()
+    const {chatID,db,chatdata,socket,profiles,userID}=useCtx()
     let chat=(chatdata)&&chatdata[chatID.id]||{};
     let option=useRef();
     const [status,setStatus]=useState('') 
+    const [user,setUser]=useState(null);
+    useEffect(()=>{
+      setUser(profiles[userID.current]);
+      
+    },[chat,profiles])
      useEffect(()=>{
       setStatus((chat.type=='group')?`${(chat.users&&chat.users.length)} member`:chat.type)
      
     },[chat])
     
     const leaveChat=()=>{ 
-      socket.current.emit('leaveChat',{id:chatID.id,del:true});
-            
+      console.log("emit")
+
+      try{socket.current.emit('leaveChat',{id:chatID.id,del:true});
+    }
+    catch(e){console.log(e)}  
     }
     
     //socket.current.emit('reportChat',chatID.id);
@@ -37,7 +45,7 @@ export default function (props){
           
         <div className="flex"> 
          <button onClick={()=>{
-          props.setDialog((prev)=>(prev+1)%2);}} className="outline-none  border-none rounded-full h-fit w-fit"> 
+          props.setDialog(1);}} className="outline-none  border-none rounded-full h-fit w-fit"> 
            <img className=" w-10 h-10 border p-1  rounded-full"
             src={chat.img||(chat.type!='group')?single:group} style={{backgroundColor:'white'}}>
            </img>
@@ -48,17 +56,21 @@ export default function (props){
          </div>
         </div>
         </div>
-
+        <div className="flex items-center">
+        {(user&&(!user.Chats.includes(chatID.id)))&&<button className=" shadow-lg mr-2 rounded-full bg-blue-300 w-24 font-bold text-gray-100 " onClick={()=>{socket.current.emit("join",[chatID.id])}}>Join</button>}
+   
         <button onClick={
           ()=>{if(option.current)option.current.classList.toggle('hidden')}
         }>
-        
         <img className=" w-4 h-8   rounded-full"
             src={options} >
            </img>
         </button>
+      
+        </div>
     </div>
-    <div ref={option} className=" p-1 w-fit mt-2 opacity-80 h-fit bg-white rounded-lg justify-start  flex-col shadow fixed right-12 font-semibold hidden">
+   
+    <div ref={option} onClick={()=>{option.current.display='none'}} className=" p-1 w-fit mt-2 opacity-80 h-fit z-10 bg-white rounded-lg justify-start  flex-col shadow fixed right-12 font-semibold hidden">
               <button onClick={muteChat} className="rounded-lg pl-2 pr-2 flex w-full">
               <img src={bell}  className="w-4 h-6  mr-1"></img><div>Mute</div></button>
               <button onClick={reportChat}  className=" rounded-lg  pl-2 pr-2 flex w-full">

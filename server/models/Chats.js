@@ -22,7 +22,7 @@ const Chats=new mongoose.Schema
     unique:true,
    }, 
    admins:{
-    default:null,
+    default:[],
     ref:'Users',
     type:[mongoose.Schema.Types.ObjectId]
    },

@@ -8,38 +8,42 @@ export default function (props) {
   const {
     chatID,
     Messages,
-    socket,
+    socket,db,
     profiles,
     chatdata,
+    chatCache,
     setChatdata,
     scrollable,
     setChatID,
     privateChats,
     setMessageDialog,
   } = useCtx();
+  
   const [chatid, setId] = useState(props.id);
   let chat = chatdata[chatid];
   const [latest, setLatest] = useState("");
   const hoverref=useRef();
-  useEffect(() => {
-    if (chat.type != "group") {
-      const profile = profiles[chat.sender];
-      if (chatID.id == chat.sender)
-        setChatID({ id: chat._id, type: "private" });
-
-      if (profile) {
-        delete profile["_id"];
-        console.log(profiles[chat.sender]);
-        setChatdata((prev) => {
-          const data = { ...prev };
-          data[chat._id] = { ...chat, ...profile };
-          return data;
-        });
-      } else socket.current.emit("getProfile", { uid: chat.sender });
+  useEffect(()=>{
+  if(chat.type=='private'){
+    if(profiles[chat.sender]){
+      const user=profiles[chat.sender];
+      delete user._id;
+      chat={...chat,...user}
+      if(chatCache.current.chats[chat._id])
+        chatCache.current.chats[chat._id]=chat;
+     if(chatdata[chat._id])
+      setChatdata((prev) => {
+        return { ...prev, [chat._id]: chat };
+      });
     }
-  }, [profiles]);
+    else socket.current.emit("getProfile", { uid: chat.sender });
+  }
+},[profiles[chat.sender]])
 
   const onClick = (event) => {
+    console.log(props.style)
+    if(window.innerWidth<600)props.setStyle(1)
+    console.log(window.innerHeight)
     setMessageDialog(0);
     setChatID((prev) => {
       return { id: chat._id, type: chat.type };
@@ -49,7 +53,8 @@ export default function (props) {
   useEffect(() => {
     if (Messages[chat._id]) setLatest(Object.values(Messages[chat._id]).pop());
   }, [Messages[chat._id]]);
-
+  
+  
   useEffect(() => {
     if (chat.type != "user") {
       const curr = Object.values(Messages[chat._id] || {}).pop();
@@ -58,6 +63,7 @@ export default function (props) {
         mid: curr ? curr.mid : -1,
         gt: true,
       });
+       
     } else {
       socket.current.on(`private.${chat._id}`, (newchat) => {
         newchat.sender = chat._id;
@@ -68,7 +74,6 @@ export default function (props) {
           n[newchat._id] = newchat;
           return n;
         });
-
         setId(newchat._id);
       });
     }
@@ -82,11 +87,12 @@ export default function (props) {
    onMouseLeave={()=>{
       if(props.style==1)hoverref.current.style.display='none';
     }}
-      style={props.style?{'border-radius':'100%',width:'fit-content',padding:0,height:'fit-content'}:{}}
-      className="p-2 m-1 mb-2 shadow-md  flex  overflow-hidden hover:bg-gray-100 h-fit w-full bg-white  rounded-md"
+    
+    style={props.style?{'borderRadius':'100%',width:'fit-content',padding:0,height:'fit-content'}:{}}
+      className="p-2 m-1 mb-2 shadow-md   flex  overflow-clip min-w-30 hover:bg-gray-100 h-fit flex-1 bg-white  rounded-lg opacity-90"
       onClick={onClick}
     >
-      <div className=" h-fit w-fit min-w-4 flex  justify-content items-center">
+      <div className=" h-fit  w-fit min-w-4 flex  justify-content items-center">
         <img 
           className=" min-w-12 w-12 h-12 border  rounded-full bg-white"
           src={
@@ -100,7 +106,7 @@ export default function (props) {
       </div>
 
       {props.style?null
-          :<div className="w-full rounded-md overflow-hidden pl-4">
+          :<div className="w-full z-20 rounded-md overflow-hidden pl-4">
         
         <div className="flex justify-between ">
           <div  className="overflow-hidden text-ellipses text-lg w-54 font-semibold">
