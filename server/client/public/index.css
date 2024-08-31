@@ -1,0 +1,106 @@
+@tailwind base
+@tailwind components
+@tailwind utilities
+
+:root {
+  font-family:"Roboto", -apple-system, BlinkMacSystemFont, "Apple Color Emoji", "Segoe UI", Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*{box-sizing: border-box;}
+#root{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    min-width: 100vw;
+    background-image: linear-gradient(to top, #a18cd1 90%, #fbc2eb 100%);
+}
+.gradient-1{
+  background-image: linear-gradient(to top, #9795f0 0%, #fbc8d4 100%);}
+
+.gradient-2{
+  background-image: linear-gradient(to top, #fdcbf1 0%, #fdcbf1 1%, #e6dee9 100%);background-blend-mode: multiply;
+}
+.gradient-3{
+  background-image: linear-gradient(to top, #6a85b6 0%, #bac8e0 100%);}
+
+.gradient-4{
+  background-image: linear-gradient(to top, #cd9cf2 0%, #f6f3ff 100%);}
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+#root{
+  height: 100vh;
+
+}
+body {
+  overflow: auto;
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+  transition-duration: 3s;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+button {
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: 0.25s;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+}
+::-webkit-scrollbar {
+  width: 2px;
+  background-color: transparent;
+}
+
+.message-clip {
+  clip-path: circle(1000%);
+}
+::-webkit-scrollbar-track {
+ background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(241, 239, 239);
+  opacity:0.2;
+  border-radius: 100%;
+  height: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(150, 148, 148);
+}
