@@ -77,7 +77,7 @@ function ChatScreen(props) {
       userconn.onsuccess = async (event) => {
         if (event.srcElement.result) {
           user = { ...(event.srcElement.result.data || {}), ...user };
-          console.log(user);
+         // console.log(user);
           const user_id = user._id;
           setProfiles({ [user_id]: user });
 
@@ -127,7 +127,6 @@ function ChatScreen(props) {
 
             socket.current.on(`messages`, async (stream) => {
               const store = {};
-              console.log(stream, "Messages");
               if (stream.data) {
                 let dat = stream.data;
                 await Promise.all(
@@ -141,7 +140,7 @@ function ChatScreen(props) {
                       socket.current.emit("getProfile", { uid: data.uid });
                   })
                 );
-                console.log("recieved", dat);
+               // console.log("recieved", dat);
                 setMessages((prev) => {
                   const store2 = { ...prev };
                   if (stream.replace) {
@@ -275,7 +274,7 @@ function ChatScreen(props) {
             setProfiles((prev) => {
               return { ...(prev || {}), ...store };
             });
-            console.log("Loaded profiles:", profiles);
+          //  console.log("Loaded profiles:", profiles);
           };
         }
       };
