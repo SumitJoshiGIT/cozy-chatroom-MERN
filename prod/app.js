@@ -68,6 +68,6 @@ app.get('/',(req, res) => {
 });
 
 
-mongoose.connect("mongodb://localhost:27017/ChatApp").then(
+mongoose.connect(process.env.DATABASE).then(
   ()=>server.listen(3000,()=>{console.log('listening on port 3000')})
 ).catch(err=>{console.log(err)})

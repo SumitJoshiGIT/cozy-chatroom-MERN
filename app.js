@@ -9,6 +9,7 @@ const mongoStore=require('connect-mongo')
 const authRouter=require('./routes/auth/auth')
 const path=require('path');
 const cors=require('cors');
+require('dotenv').config()
 //const passportSocketIo = require('passport.socketio');
 const {Server}=require('socket.io');
 const {onConnection,onDisconnection}=require('./routes/api/socketEvents');
@@ -67,7 +68,8 @@ app.get('/',(req, res) => {
   return res.sendFile(path.join(__dirname, 'client','dist','index.html'));
 });
 
+console.log(process.env.DATABASE)
 
-mongoose.connect("mongodb://localhost:27017/ChatApp").then(
+mongoose.connect(process.env.DATABASE).then(
   ()=>server.listen(3000,()=>{console.log('listening on port 3000')})
 )
