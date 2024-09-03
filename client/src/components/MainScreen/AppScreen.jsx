@@ -26,7 +26,7 @@ function ChatScreen(props) {
   const privateChats = useRef({});
   const scrollable = useRef(null);
   const socket = useRef(
-    io(`${window.location.origin}:3000`, {
+    io((window.location.hostname=='localhost')?"http://localhost:3000":"https://cozy-chatroom-mern.onrender.com", {
       withCredentials: true,
       transports: ["websocket"],
       reconnection: true,

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const origin =`${window.location.origin}:3000`;
+const origin =window.location.hostname==('localhost')?"http://localhost:3000":"https://cozy-chatroom-mern.onrender.com";
 
 async function fetchCsrfToken() {
   try {
