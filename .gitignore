@@ -8,6 +8,7 @@ lerna-debug.log*
 *.env
 node_modules
 dist
+public/
 dist-ssr
 *.local
 .netlify
