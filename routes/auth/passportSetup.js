@@ -41,7 +41,7 @@ async function signInCallback(email,password,done) {
   password=xss(password)
   if(/^[\w-]+(?:\.[\w-]+)*@(?:[\w-]+\.)+[a-zA-Z]{2,7}$/.test(email)){}
   else if(/^(?!.*[<>;'"&]).{8,64}$/.test(password)){}
-
+ 
   const user=await Users.findOne({email:email})
   if(user){
     console.log("P1")

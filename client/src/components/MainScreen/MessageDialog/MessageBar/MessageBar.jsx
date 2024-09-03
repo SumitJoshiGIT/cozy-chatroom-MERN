@@ -14,7 +14,7 @@ const MessageBar = React.memo((props) => {
     setUser(profiles[userID.current]);
   }, [profiles]);
   const filesRef = useRef(null);
-  const [files, setFiles] = useState(null);
+  const [files, setFiles] = useState([]);
 
   async function SendMessage(event) {
     event.preventDefault();
@@ -72,30 +72,53 @@ const MessageBar = React.memo((props) => {
       );
     } else return null;
   }, [props.reply]);
-
-  function handleFiles(event) {
-    //  event.preventDefault();
-    setFiles(Array.from(event.target.files));
-  }
+  useEffect(()=>{console.log(files)},files)
+  function handleChange(event) {
+           if(filesRef.current.files){
+            console.log(filesRef.current.files,"ff")
+             const files=filesRef.current.files.map((file)=>{
+              if(file){
+                const reader=newFileReader()
+                reader.onloadend=()=>{
+                 const result=reader.result.split(',')[1];
+                 const filename=file.name;
+                 const type=file.type;
+               
+              setFiles((prev)=>[...prev,...result])
+                }
+                
+              return reader.readAsDataURL(file);
+              }  
+            })
+            console.log(files)
+            setFiles(files);
+          }}
+  
 
   return (
     <div className=" bg-white m-4 flex flex-col justify-center items-center bg-transparent overflow-x-hidden  shadow-md p-1 rounded-lg w-full max-w-xl ">
+      {files.map((file,idx)=>{
+        
+        return <div key={idx} className="bg-red">Huje</div>
+
+      })}
       {replyTo}
       {user &&(chatID.type=='user'||user.Chats.includes(chatID.id))? (
         <div className="p-1 rounded-md shadow-md  bg-gray-100 w-full flex items-end">
           <button
             onClick={() => {
               filesRef.current.click();
-            }}
+              }}
             className="h-fit m-2 rounded-full"
           >
             <div>
               <input
                 ref={filesRef}
                 type="file"
-                onClick={handleFiles}
+                onChange={handleChange}
                 multiple
                 className="hidden "
+
               />
               <img className="h-6 " src={attachment} />
             </div>

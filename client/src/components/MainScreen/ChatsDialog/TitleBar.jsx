@@ -17,7 +17,7 @@ export default function (props){
 //     <img className="w-12 h-12 border rounded-full p-2" src={src}/>
 //  </button>
     const src=((profile.img)?(profile.img.src):single);  
-    return( <div style={props.style?{display:'block',width:'30px'}:{}}className="text-xl   rounded-xl mt-3 flex p-2 pb-0   justify-content items-center  w-full">
+    return( <div style={props.style?{display:'block',width:'40px'}:{}} className="text-xl   rounded-xl mt-3 flex p-2 pb-0   justify-content items-center  w-full">
          <button onClick={()=>{props.setStyle((prev)=>!prev)}} className="min-w-4 ml-1 h-fit w-fit">
             <img  className="min-w-4 opacity-60 w-4 h-6 mt-1" src={menu}/>
          </button>

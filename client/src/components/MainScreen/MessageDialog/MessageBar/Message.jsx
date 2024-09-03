@@ -52,10 +52,21 @@ export default function (props) {
   }, [profiles[messageItem.uid]]);
 
   const handleRight = (event) => {
+    event.preventDefault();
+    let flag=0
     if (contextref.current) {
-      const el = contextref.current;
       contextref.current.style.display = "block";
+      document.addEventListener('click',function click(){
+        contextref.current.style.display='none';
+        document.removeEventListener('click',click);
+      })
+      
+      document.addEventListener('contextmenu',function rclick(event){
+        if(contextref.current.contains(event.target))contextref.current.style.display='none';
+        document.removeEventListener('contextmenu',rclick);
+      }) 
     }
+    flag=1;
     event.preventDefault();
   };
   const onClick = useCallback(() => {
@@ -128,8 +139,7 @@ export default function (props) {
               >
                 <p className="text-ellipses font-bold">Sumit Joshi</p>
                 <span className="text-ellipses overflow-hidden max-w-sm h-16">
-                  Life is a dream come true in all aspects hue hue hueu hueh
-                  expect fucking
+                  Reply to Someone Else
                 </span>
               </div>
             ) : null}

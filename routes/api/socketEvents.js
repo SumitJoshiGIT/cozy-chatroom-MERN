@@ -196,32 +196,33 @@ async function onConnection(socket, io) {
 
     socket.on("updateProfile", async (stream) => {
         const changes = {};
-        console.log("logged")
         if (stream.about || stream.name) {
                 changes[stream.about?"about": "name"] = xss(stream.about || stream.name);
                 profile[stream.about?"about": "name"] = xss(stream.about || stream.name);
         }
+        console.log(stream)
         if (stream.img&&allowedTypes.includes(stream.img.type)) {
-            const buffer = Buffer.from(new Uint8Array(stream.file));
+            const buffer = Buffer.from(stream.file,'base64');
             const content = {
-              src: `${profile._id}_${stream.img.name}`,
+              src: `${profile._id}.jpg`,
               name: stream.img.name,
               size: stream.img.size,
               contentType: stream.img.type,
             };
-            if (profile.img)fs.unlink(path.join(process.cwd(), "public", profile.img.src));
+            console.log(content.src)
+            //if (profile.img.src)fs.promises.unlink(path.join(process.cwd(), "public", profile.img.src));
 
             fs.writeFile(
-              path.join(process.cwd(), "public", pathto),
+              path.join(process.cwd(), "public", content.src),
               buffer,
               (err) => {
                 if (!err){profile.img=content;changes.img=content}
               });
-            
-            }
+
+        }
         await profile.save();
         changes._id=profile._id; 
-        socket.emit("profile", profile);
+        socket.emit("profile",profile);
         console.log(changes)
        // chatSet.forEach((x) => io.to(x).emit("profile",changes));
     });

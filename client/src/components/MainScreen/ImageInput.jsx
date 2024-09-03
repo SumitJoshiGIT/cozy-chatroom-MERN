@@ -26,26 +26,20 @@ return  <div className='border-1 overflow-clip w-fit h-36 flex items-baseline ro
            const validImageTypes = ['image/jpeg', 'image/png', 'image/webp','image/svg','image/svg+xml']; 
            if(validImageTypes.includes(file.type)){
             const fileReader=new FileReader();
-            fileReader.onload=((e)=>{
-                setSrc(e.target.result)
+                fileReader.onloadend=((ev)=>{
+                props.fileform.current.file=ev.target.result.split(',')[1].
+                      props.fileform.current.type=file.type
+                      props.fileform.current.name=file.name
+                      props.fileform.current.dimensions=[file.width||-1,file.height||-1]
+                      props.fileform.current.size=file.size
+                
+                setSrc(ev.target.result)
+                
                 }
                 )
 
             fileReader.readAsDataURL(file);        
            
-            fileReader.onloadend = function(e) {      
-                    const Reader=new FileReader();
-                    Reader.onload=((ev)=>{
-                      props.fileform.current.file=ev.target.result
-                      props.fileform.current.type=file.type
-                      props.fileform.current.name=file.name
-                      props.fileform.current.dimensions=[file.width||-1,file.height||-1]
-                      props.fileform.current.size=file.size
-                      console.log(props.fileform)  
-                      props.callback()
-                      })
-                    Reader.readAsArrayBuffer(file)
-            };   
            }}}} ref={file} className="text-xs w-0 h-0" type='file'/>
             
        

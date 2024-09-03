@@ -38,6 +38,7 @@ app.use(express.text());
 app.use(cors({ cors: { origin: "*" } }));
 app.use(express.static(path.join(__dirname,'client','dist')));
 app.use(express.static(path.join(__dirname,'public')))
+console.log(path.join(__dirname,'public'))
 app.use(cookieParser());
 
 

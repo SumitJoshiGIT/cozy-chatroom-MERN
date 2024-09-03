@@ -9,7 +9,7 @@ import { useCtx } from "../AppScreen";
 const ChatDialogComponent = React.memo(function ({}) {
   const { setChatdata,socket, privateChats, profiles, userID,chatCache} = useCtx();
   const [style,setStyle]=useState(1);
-  const [position, setPosition] = useState(window.innerWidth<600?{position:'fixed'}:{});
+  const [position, setPosition] = useState(window.innerWidth<700?{position:'fixed'}:{});
   useEffect(() => {
     //socket.current.emit("chats", { curr: 0, type: "chats" });
     const onResize=()=>{
@@ -23,8 +23,8 @@ const ChatDialogComponent = React.memo(function ({}) {
   
    
   return (
-    <div className="h-screen pb-3 pt-3">
-      <div style={style==1?{width:'fit-content',padding:'1px',minWidth:'20px'}:{...position}} className="w-sm max-w-sm p-4  flex-col  border-gray-300 shadow-xl   w-full overflow-hidden transition-2s h-full rounded-e-2xl gradient-2  z-10">
+    <div className="h-screen pb-3 pt-3 ">
+      <div style={style==1?{width:'fit-content',padding:'1px',minWidth:'30px'}:{...position,minWidth:'300px'}} className="w-xl max-w-sm p-4  flex-col  border-gray-300 shadow-xl   w-full overflow-hidden transition-2s h-full rounded-e-2xl gradient-2  z-10">
         <Titlebar setStyle={setStyle} style={style}/>
         {<Chats cache={chatCache} style={style} setStyle={setStyle}/>}
       </div>
