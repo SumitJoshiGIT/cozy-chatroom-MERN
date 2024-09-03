@@ -26,7 +26,7 @@ function ChatScreen(props) {
   const privateChats = useRef({});
   const scrollable = useRef(null);
   const socket = useRef(
-    io("http://localhost:3000", {
+    io(`${window.location.origin}:3000`, {
       withCredentials: true,
       transports: ["websocket"],
       reconnection: true,
