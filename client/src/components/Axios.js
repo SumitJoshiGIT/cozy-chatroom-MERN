@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const origin = f`${window.location.origin}:3000`;
+const origin =`${window.location.origin}:3000`;
 
 async function fetchCsrfToken() {
   try {
