@@ -49,6 +49,7 @@ io.use(sharedsession(sessionMiddleware,{autoSave:true}))
 
 app.use(authRouter);
 
+app.get('/ping',(req,res)=>res.send("pong"))
 //app.use((req,res,next)=>{console.log(req);next()})
 
 // app.use(csrf({

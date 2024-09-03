@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const origin = "http://localhost:3000";
+const origin = f`${window.location.origin}:3000`;
 
 async function fetchCsrfToken() {
   try {
