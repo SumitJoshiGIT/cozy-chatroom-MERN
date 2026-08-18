@@ -7,11 +7,14 @@ import Card from "../../../ui/Card";
 import IconButton from "../../../ui/IconButton";
 import Button from "../../../ui/Button";
 import { TextField, TextArea } from "../../../ui/TextField";
+import { useToast } from "../../../ui/Toast";
+import { downloadFile } from "../../../../download";
 import background from '/background.jpg'
 import single from '/single.svg'
 import close from '/close.svg'
 export default function (props){
-    const {profiles,contacts,setContacts,setMessageDialog,socket,userID}=useCtx();
+    const {profiles,contacts,setContacts,setMessageDialog,socket,userID,setChatID,privateChats,blocked,toggleBlock,report}=useCtx();
+    const toast=useToast();
     const navigate=useNavigate();
     const fileform=useRef({});
     const currentId=props.infoPanel.current||userID.current;
@@ -19,6 +22,10 @@ export default function (props){
     const [aboutSt, setAbout] = useState(profile.about || "");
     const [useralias, setName] = useState(profile.name || "");
     const [username, setUsername] = useState(profile.username || '');
+    const [reporting, setReporting] = useState(false);
+    const [reportReason, setReportReason] = useState("");
+    const [reportSent, setReportSent] = useState(false);
+    const isBlocked = blocked && blocked.has(currentId);
 
   useEffect(() => {
     setAbout(profile.about || "");
@@ -102,6 +109,60 @@ export default function (props){
           }}>
           Log out
         </Button>
+      )}
+
+      {!admin && (
+        <div className="mt-4 flex flex-col gap-2 self-start">
+          <div className="flex gap-2">
+            <Button variant="primary" onClick={() => {
+                const existingId = privateChats.current && privateChats.current[currentId];
+                setChatID({ id: existingId || currentId, type: existingId ? 'private' : 'user' });
+                setMessageDialog(0);
+              }}>
+              Message
+            </Button>
+            <Button variant={isBlocked ? "ghost" : "danger"} onClick={() => toggleBlock(currentId)}>
+              {isBlocked ? "Unblock" : "Block"}
+            </Button>
+            <Button variant="ghost" onClick={() => setReporting((v) => !v)}>
+              Report
+            </Button>
+            {profile.img && (
+              <Button
+                variant="ghost"
+                onClick={() =>
+                  downloadFile(profile.img.src, profile.img.name || `${profile.username || "profile"}.jpg`).catch(
+                    () => toast.error("Couldn't download photo")
+                  )
+                }
+              >
+                Download photo
+              </Button>
+            )}
+          </div>
+          {reporting && (
+            <div className="flex flex-col gap-2 max-w-md">
+              <TextArea
+                className="h-16 w-full"
+                placeholder="Why are you reporting this user? (optional)"
+                value={reportReason}
+                onChange={(event) => setReportReason(event.target.value)}
+              />
+              <Button
+                variant="danger"
+                className="self-start"
+                disabled={reportSent}
+                onClick={() => {
+                  report(currentId, "user", reportReason);
+                  setReportSent(true);
+                  setTimeout(() => { setReporting(false); setReportSent(false); setReportReason(""); }, 800);
+                }}
+              >
+                {reportSent ? "Reported" : "Submit report"}
+              </Button>
+            </div>
+          )}
+        </div>
       )}
       </div>
   </Card>

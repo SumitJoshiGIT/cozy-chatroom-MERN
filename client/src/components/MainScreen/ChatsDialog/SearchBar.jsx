@@ -40,7 +40,7 @@ export default function (props){
             setChatdata(dict)
         })
     },[])
-    return <div style={{display:props.style?'none':'block'}} className=" text-sm w-100  ml-2 mb-2 mt-2">
+    return <div style={{display:props.style?'none':'block'}} className=" text-sm w-full mb-2">
      <div className="rounded-full p-2 items-center justify-center w-full overflow-clip h-fit flex ring-1 ring-gray-300 bg-white ">
 
       <input ref={ref}  placeholder='Search ' className="active:outline-none pl-2 outline-none w-full  p-0 bg-transparent"  onChange={onChange}/>

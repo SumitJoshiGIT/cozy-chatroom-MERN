@@ -41,6 +41,11 @@ const Chats=new mongoose.Schema
     required:true,
     default:"private"
    },
+   pinned:{
+    default:[],
+    ref:'Messages',
+    type:[mongoose.Schema.Types.ObjectId]
+   },
    permissions:mongoose.Schema.Types.ObjectId
 },
    {timestamps:true}

@@ -7,14 +7,19 @@ import options from '/options.svg'
 import bell from '/bell.svg'
 import report from '/report.svg'
 import leave from '/leave.svg'
+import del from '/delete.svg'
+import { WALLPAPERS } from '../../../../wallpaper'
 
 
 export default function (props){
-    
-    const {chatID,db,chatdata,socket,profiles,userID}=useCtx()
+
+    const {chatID,db,chatdata,socket,profiles,userID,typingUsers,report:reportFn,deleteChat}=useCtx()
     let chat=(chatdata)&&chatdata[chatID.id]||{};
     const [user,setUser]=useState(null);
+    const [showWallpaper,setShowWallpaper]=useState(false);
+    const [confirmDelete,setConfirmDelete]=useState(false);
     const option=useRef();
+    const isOwner = chat.type==='group' && chat.owner && userID.current===chat.owner;
 
     useEffect(()=>{
       setUser(profiles[userID.current]);
@@ -23,10 +28,16 @@ export default function (props){
 
     const otherProfile = chat.type !== 'group' ? profiles[chat.sender] : null;
     const memberCount = chat.users && chat.users.length;
-    const status = chat.type === 'group'
+    const typingIds = Object.keys((typingUsers && typingUsers[chatID.id]) || {});
+    const typingStatus = typingIds.length
+      ? (chat.type === 'group'
+          ? `${typingIds.map((id) => (profiles[id] && profiles[id].name) || 'Someone').join(', ')} typing…`
+          : 'typing…')
+      : null;
+    const status = typingStatus || (chat.type === 'group'
       ? `${memberCount || 0} member${memberCount === 1 ? '' : 's'}`
-      : (otherProfile && otherProfile.username ? `@${otherProfile.username}` : 'Direct message');
-    
+      : (otherProfile && otherProfile.username ? `@${otherProfile.username}` : 'Direct message'));
+
     const leaveChat=()=>{ 
       console.log("emit")
       try{
@@ -36,22 +47,35 @@ export default function (props){
     catch(e){console.log(e)}  
     }
     
-    //socket.current.emit('reportChat',chatID.id);
     const reportChat=()=>{
-     socket.current.emit('reportChat',chatID.id);
+     reportFn(chatID.id,'chat');
     }
     const muteChat=()=>{
       socket.current.emit('muteChat',chatID.id);
     }
+    const deleteGroupChat=(e)=>{
+      if(!confirmDelete){
+        e.stopPropagation();
+        setConfirmDelete(true);
+        return;
+      }
+      deleteChat(chatID.id);
+      setConfirmDelete(false);
+    }
     useEffect(()=>{
         if(option.current){
           option.current.classList.add('hidden');
-            
         }
+        setConfirmDelete(false);
     },[chatID])
+    useEffect(()=>{
+        if(!confirmDelete) return;
+        const t=setTimeout(()=>setConfirmDelete(false),4000);
+        return ()=>clearTimeout(t);
+    },[confirmDelete])
    return( 
       <div className="w-full  rounded-t-xl ">
-      <div className="  w-full shadow-sm  border-b  p-2   pl-4 justify-between items-center  h-14 bg-white flex">
+      <div className="  w-full shadow-sm  border-b dark:border-gray-700  p-2   pl-4 justify-between items-center  h-14 bg-white dark:bg-gray-800 flex">
           
         <div className="flex"> 
          <button onClick={()=>{
@@ -59,13 +83,13 @@ export default function (props){
            <Avatar src={chat.img && chat.img.src} kind={chat.type=='group'?'group':'user'} size="sm" />
          </button>
         <div className="p-2 pt-1 flex flex-col ">
-         <div className="text-sm w-36 text-ellipses font-semibold">{chat.name||"Unnamed"}</div>
-         <div className="text-xs text-gray-400">{status}
+         <div className="text-sm w-36 text-ellipses font-semibold text-gray-800 dark:text-gray-100">{chat.name||"Unnamed"}</div>
+         <div className={`text-xs ${typingStatus ? 'text-[var(--accent-dark)] italic' : 'text-gray-400'}`}>{status}
          </div>
         </div>
         </div>
         <div className="flex items-center">
-        {(user&&(chatID.type!='user'&&(!user.Chats.includes(chatID.id))))&&<Button variant="secondary" className="mr-2 w-24" onClick={()=>{socket.current.emit("join",[chatID.id])}}>Join</Button>}
+        {(user&&(chatID.type!='user'&&(!user.Chats.includes(chatID.id))))&&<Button variant="primary" className="mr-2 w-24" onClick={()=>{socket.current.emit("join",[chatID.id])}}>Join</Button>}
    
         <IconButton icon={options} alt="Options" onClick={()=>{
             if(option.current){
@@ -84,15 +108,37 @@ export default function (props){
          onMouseLeave={(event)=>{
           option.current.classList.toggle('hidden');
          }}
-         className=" p-1 w-40 mt-4 ring-red-100 opacity-95 h-fit z-10 bg-white rounded-lg justify-start flex-col shadow-lg fixed right-12 py-2 hidden text-sm text-gray-600">
-              <button onClick={muteChat} className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100">
-              <img src={bell}  className="w-4 h-4"></img><div>Mute</div></button>
-              <button onClick={reportChat}  className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100">
-              <img src={report}  className="w-4 h-4"></img><div>Report</div></button>
-              <button onClick={leaveChat} className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100">
-              <img src={leave}  className="w-4 h-4"></img><div>{(chat.type=='group')?'Leave':'Remove'}</div></button>
+         className=" p-1 w-40 mt-4 ring-red-100 opacity-95 h-fit z-10 bg-white dark:bg-gray-800 rounded-lg justify-start flex-col shadow-lg fixed right-12 py-2 hidden text-sm text-gray-600 dark:text-gray-200">
+              <button onClick={muteChat} className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <img src={bell}  className="w-4 h-4 dark:invert dark:opacity-80"></img><div>Mute</div></button>
+              <button onClick={(e)=>{e.stopPropagation();setShowWallpaper((v)=>!v);}}  className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <span className="w-4 h-4 flex items-center justify-center">🖼</span><div>Wallpaper</div></button>
+              <button onClick={reportChat}  className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <img src={report}  className="w-4 h-4 dark:invert dark:opacity-80"></img><div>Report</div></button>
+              <button onClick={leaveChat} className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <img src={leave}  className="w-4 h-4 dark:invert dark:opacity-80"></img><div>{(chat.type=='group')?'Leave':'Remove'}</div></button>
+              {isOwner && (
+              <button onClick={deleteGroupChat} className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500">
+              <img src={del}  className="w-4 h-4"></img><div>{confirmDelete?'Confirm delete?':'Delete group'}</div></button>
+              )}
 
     </div>
-   </div>  
+    {showWallpaper && (
+      <div
+        onMouseLeave={()=>setShowWallpaper(false)}
+        className="p-3 mt-1 w-56 h-fit z-20 bg-white dark:bg-gray-800 rounded-lg shadow-lg fixed right-12 grid grid-cols-3 gap-2"
+      >
+        {WALLPAPERS.map((w)=>(
+          <button
+            key={w.id}
+            title={w.name}
+            onClick={()=>{ props.setWallpaper && props.setWallpaper(w.css); setShowWallpaper(false); }}
+            className={`h-12 rounded-md border-2 ${ (props.wallpaper||null)===w.css ? 'border-[var(--accent)]' : 'border-transparent'}`}
+            style={{ background: w.css || `url(/background.jpg) center/cover` }}
+          />
+        ))}
+      </div>
+    )}
+   </div>
   );
 }

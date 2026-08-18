@@ -24,13 +24,13 @@ const ChatDialogComponent = React.memo(function ({}) {
    
   return (
     <div className="h-screen pb-3 pt-3 ">
-      <div style={style==1?{width:'fit-content',padding:'1px',minWidth:'30px'}:{...position,minWidth:'300px'}} className="w-xl max-w-sm p-4  flex-col  border-gray-300 shadow-xl   w-full overflow-hidden transition-2s h-full rounded-e-2xl gradient-2  z-10">
+      <div style={style?{...position,width:'76px'}:{...position,width:'320px'}} className="flex flex-col items-center p-3 border-gray-300 shadow-xl overflow-hidden transition-all duration-300 h-full rounded-e-2xl gradient-2 z-10">
         <Titlebar setStyle={setStyle} style={style}/>
         {<Chats cache={chatCache} style={style} setStyle={setStyle}/>}
       </div>
-    
-    </div>  
-    
+
+    </div>
+
   );
 });
 

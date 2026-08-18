@@ -103,3 +103,19 @@ button {
     transition-duration: 0.001ms !important;
   }
 }
+
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #14111d;
+}
+
+html.dark .gradient-1,
+html.dark .gradient-2,
+html.dark .gradient-3,
+html.dark .gradient-4 {
+  background-image: linear-gradient(to top, #241f33 0%, #1a1625 100%);
+  background-blend-mode: normal;
+}

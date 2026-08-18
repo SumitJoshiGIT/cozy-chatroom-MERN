@@ -4,13 +4,27 @@ import { useCtx } from "../../AppScreen";
 import { apiOrigin } from "../../../../apiOrigin";
 import Avatar from "../../../ui/Avatar";
 import forward from "/forward.svg";
-import report from "/report.svg";
+import reportIcon from "/report.svg";
 import reply from "/reply.svg";
 import copy from "/copy.svg";
 import del from "/delete.svg";
+import edit from "/edit.svg";
+import fileIcon from "/files.svg";
+import { downloadFile } from "../../../../download";
+import { useToast } from "../../../ui/Toast";
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+const formatSize = (bytes) => {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 export default function (props) {
-  const { profiles, db, userID, Messages, chatID, socket } = useCtx();
+  const { profiles, db, userID, Messages, chatID, socket, starred, toggleStar, chatdata, pinMessage, unpinMessage, reactMessage, report } = useCtx();
   const contextref = useRef();
+  const [showReactions, setShowReactions] = useState(false);
+  const toast = useToast();
   const messageItem = props.item;
   if (!messageItem.status) {
     messageItem.status = "✔";
@@ -23,7 +37,7 @@ export default function (props) {
   const time = new Date(messageItem.updatedAt);
   const flag = messageItem.uid == userID.current;
   const repliedMessage = props.reply_to
-    ? (Messages[chatID.id] || {})[props.reply_to] || messageItem.replyToMessage
+    ? props.reply_data || messageItem.replyToMessage
     : null;
   const repliedProfile = repliedMessage ? profiles[repliedMessage.uid] || {} : {};
 
@@ -86,8 +100,30 @@ export default function (props) {
   const copyHandle = () => {
     navigator.clipboard.writeText(messageItem.content);
   };
-  const forwardHandle = () => {};
-  const reportHandle = () => {};
+  const forwardHandle = () => {
+    props.setForward([messageItem, profile]);
+  };
+  const reportHandle = () => {
+    report(messageItem._id, "message");
+  };
+  const editHandle = () => {
+    props.setEdit([messageItem]);
+  };
+  const isStarred = starred && starred.has(messageItem._id);
+  const starHandle = () => {
+    toggleStar(messageItem._id);
+  };
+  const chat = chatdata[chatID.id] || {};
+  const canPin = chat.type !== 'group' || (chat.admins||[]).includes(userID.current) || chat.owner===userID.current;
+  const isPinned = (chat.pinned||[]).includes(messageItem._id);
+  const pinHandle = () => {
+    (isPinned ? unpinMessage : pinMessage)(messageItem._id, chatID.id);
+  };
+  const reactHandle = (emoji) => {
+    reactMessage(messageItem._id, chatID.id, emoji);
+    setShowReactions(false);
+  };
+  const myReaction = (messageItem.reactions||[]).find(r => (r.users||[]).includes(userID.current));
   const deleteHandle = () => {
     socket.current.emit("deleteMessage", [
       messageItem.mid,
@@ -116,8 +152,8 @@ export default function (props) {
 
       <div onContextMenu={handleRight} className="relative max-w-[75%] md:max-w-[60%]">
         <div
-          style={{ backgroundColor: flag ? "#DCF8C6" : "white" }}
           className={`px-2.5 py-1.5 shadow-sm relative
+            ${flag ? "bg-[#DCF8C6] dark:bg-[#245a4b] dark:text-gray-100" : "bg-white dark:bg-gray-700 dark:text-gray-100"}
             ${flag
               ? `rounded-2xl ${grouped ? "rounded-tr-2xl" : "rounded-tr-md"}`
               : `rounded-2xl ${grouped ? "rounded-tl-2xl" : "rounded-tl-md"}`}
@@ -151,27 +187,80 @@ export default function (props) {
 
             {messageItem.attachments && messageItem.attachments.length > 0 && (
               <div className="flex flex-wrap gap-1 mb-1">
-                {messageItem.attachments.map((a, idx) => (
-                  <a key={idx} href={`${apiOrigin}/${a.src}`} target="_blank" rel="noreferrer">
-                    <img src={`${apiOrigin}/${a.src}`} alt={a.name} className="max-h-40 max-w-52 rounded-lg object-cover" />
-                  </a>
-                ))}
+                {messageItem.attachments.map((a, idx) =>
+                  (a.contentType || "").startsWith("image/") ? (
+                    <a key={idx} href={`${apiOrigin}/${a.src}`} target="_blank" rel="noreferrer">
+                      <img src={`${apiOrigin}/${a.src}`} alt={a.name} className="max-h-40 max-w-52 rounded-lg object-cover" />
+                    </a>
+                  ) : (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() =>
+                        downloadFile(`${apiOrigin}/${a.src}`, a.name).catch(() => toast.error("Couldn't download file"))
+                      }
+                      className="flex items-center gap-2 max-w-52 px-2 py-1.5 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-colors text-left"
+                    >
+                      <img src={fileIcon} className="w-6 h-6 shrink-0 opacity-70 dark:invert" alt="" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">{a.name}</span>
+                        <span className="block text-xs text-gray-500 dark:text-gray-400">{formatSize(a.size)}</span>
+                      </span>
+                    </button>
+                  )
+                )}
               </div>
             )}
 
             {messageItem.content && (
               <div className="flex items-end gap-2 flex-wrap">
-                <span className="text-sm text-gray-800 whitespace-pre-wrap break-words flex-1 min-w-0">
+                <span className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap break-words flex-1 min-w-0">
                   {messageItem.content}
                 </span>
                 <span className="shrink-0 flex items-center gap-0.5 text-[0.65rem] text-gray-400 ml-auto -mb-0.5">
+                  {isPinned && <span title="Pinned">📌</span>}
+                  {isStarred && <span className="text-amber-500">★</span>}
+                  {messageItem.edited && <span className="italic">edited</span>}
                   {pad(time.getHours())}:{pad(time.getMinutes())}
                   {flag && <span className={messageItem.status === "✔✔" ? "text-purple-500" : ""}>{messageItem.status}</span>}
                 </span>
               </div>
             )}
+
+            {messageItem.reactions && messageItem.reactions.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {messageItem.reactions.map((r) => (
+                  <button
+                    key={r.emoji}
+                    onClick={() => reactHandle(r.emoji)}
+                    className={`text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 ${
+                      (r.users||[]).includes(userID.current)
+                        ? "bg-[var(--accent-light)] border-[var(--accent)]"
+                        : "bg-black/5 dark:bg-white/10 border-transparent"
+                    }`}
+                  >
+                    <span>{r.emoji}</span>
+                    <span className="text-gray-500 dark:text-gray-300">{r.users.length}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
+        {showReactions && (
+          <div
+            onMouseLeave={() => setShowReactions(false)}
+            className="absolute z-30 flex gap-1 bg-white dark:bg-gray-800 shadow-lg rounded-full px-2 py-1 -top-10 left-0"
+          >
+            {REACTION_EMOJIS.map((e) => (
+              <button
+                key={e}
+                onClick={() => reactHandle(e)}
+                className={`text-lg hover:scale-125 transition-transform ${myReaction && myReaction.emoji === e ? "scale-125" : ""}`}
+              >{e}</button>
+            ))}
+          </div>
+        )}
         <div
           onClick={() => {
             contextref.current.style.display = "none";
@@ -180,43 +269,79 @@ export default function (props) {
           onMouseLeave={() => {
             contextref.current.style.display = "none";
           }}
-          className="font-semibold text-gray-600 absolute text-sm w-40 py-2 h-fit hidden bg-white shadow-lg rounded-lg z-20"
+          className="font-semibold text-gray-600 dark:text-gray-200 absolute text-sm w-40 py-2 h-fit hidden bg-white dark:bg-gray-800 shadow-lg rounded-lg z-20"
         >
           <button
             onClick={replyHandle}
-            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100"
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
           >
-            <img src={reply} className="w-4 h-4"></img>
+            <img src={reply} className="w-4 h-4 dark:invert dark:opacity-80"></img>
             <div>Reply</div>
           </button>
           <button
             onClick={copyHandle}
-            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100"
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
           >
-            <img src={copy} className="w-4 h-4"></img>
+            <img src={copy} className="w-4 h-4 dark:invert dark:opacity-80"></img>
             <div>Copy Text</div>
           </button>
           <button
             onClick={forwardHandle}
-            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100"
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
           >
-            <img src={forward} className="w-4 h-4"></img>
+            <img src={forward} className="w-4 h-4 dark:invert dark:opacity-80"></img>
             <div>Forward</div>
           </button>
 
           <button
-            onClick={deleteHandle}
-            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100"
+            onClick={(e) => { e.stopPropagation(); contextref.current.style.display = "none"; setShowReactions((v) => !v); }}
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
           >
-            <img src={del} className="w-4 h-4"></img>
+            <span className="w-4 h-4 flex items-center justify-center">😊</span>
+            <div>React</div>
+          </button>
+
+          <button
+            onClick={starHandle}
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+          >
+            <span className={`w-4 h-4 flex items-center justify-center ${isStarred ? "text-amber-500" : "text-gray-500"}`}>★</span>
+            <div>{isStarred ? "Unstar" : "Star"}</div>
+          </button>
+
+          {canPin && (
+            <button
+              onClick={pinHandle}
+              className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <span className={`w-4 h-4 flex items-center justify-center ${isPinned ? "" : "opacity-60"}`}>📌</span>
+              <div>{isPinned ? "Unpin" : "Pin"}</div>
+            </button>
+          )}
+
+          {flag && messageItem.content && (
+            <button
+              onClick={editHandle}
+              className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <img src={edit} className="w-4 h-4 dark:invert dark:opacity-80"></img>
+              <div>Edit</div>
+            </button>
+          )}
+
+          <button
+            onClick={deleteHandle}
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+          >
+            <img src={del} className="w-4 h-4 dark:invert dark:opacity-80"></img>
             <div>Delete</div>
           </button>
 
           <button
             onClick={reportHandle}
-            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100"
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
           >
-            <img src={report} className="w-4 h-4"></img>
+            <img src={reportIcon} className="w-4 h-4 dark:invert dark:opacity-80"></img>
             <div>Report</div>
           </button>
         </div>

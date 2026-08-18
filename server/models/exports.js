@@ -3,6 +3,7 @@ const UsersModel=require('./Users');
 const PermissionsModel=require('./Permissions');
 const SettingsModel=require('./Settings');
 const MessagesModel=require('./Messages');
+const ReportsModel=require('./Reports');
 
 
-module.exports={ChatsModel,MessagesModel,UsersModel,PermissionsModel,SettingsModel}
+module.exports={ChatsModel,MessagesModel,UsersModel,PermissionsModel,SettingsModel,ReportsModel}

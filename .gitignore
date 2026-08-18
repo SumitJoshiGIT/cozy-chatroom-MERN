@@ -11,7 +11,7 @@ node_modules
 /client/dist
 dist-ssr
 *.local
-.netlify
+.vercel
 .vscode/*
 !.vscode/extensions.json
 .idea

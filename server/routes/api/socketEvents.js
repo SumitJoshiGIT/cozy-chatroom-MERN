@@ -11,13 +11,26 @@ const allowedTypes = {
   "image/svg":"svg",
   "image/svg+xml":"svg",
 };
+const allowedDocTypes = {
+  "application/pdf":"pdf",
+  "application/msword":"doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":"docx",
+  "application/vnd.ms-excel":"xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":"xlsx",
+  "application/vnd.ms-powerpoint":"ppt",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation":"pptx",
+  "text/plain":"txt",
+  "text/csv":"csv",
+  "application/zip":"zip",
+};
 const maxUploadSize = 2*1024*1024;
 
-async function saveUpload(base64, mimeType, name, size) {
-  if (!base64 || !allowedTypes[mimeType]) return null;
+async function saveUpload(base64, mimeType, name, size, extraTypes) {
+  const allowList = extraTypes ? { ...allowedTypes, ...extraTypes } : allowedTypes;
+  if (!base64 || !allowList[mimeType]) return null;
   const buffer = Buffer.from(base64, 'base64');
   if (buffer.length > maxUploadSize) return null;
-  const ext = allowedTypes[mimeType];
+  const ext = allowList[mimeType];
   const src = `${Date.now()}-${Math.round(Math.random()*1e9)}.${ext}`;
   await fs.promises.writeFile(path.join(process.cwd(), "public", src), buffer);
   return { src, name, size, contentType: mimeType };
@@ -42,6 +55,14 @@ async function onConnection(socket, io) {
     });
     async function SendMessage(message) {
       if (chatSet.has(message.cid)) {
+        const parentChat = await models.ChatsModel.findById(message.cid);
+        if (parentChat && parentChat.type === "private") {
+          const otherId = (parentChat.users || []).find((u) => u.toString() !== profile._id.toString());
+          if (otherId) {
+            const other = await models.UsersModel.findById(otherId, "blocked");
+            if (other && other.blocked.some((b) => b.toString() === profile._id.toString())) return;
+          }
+        }
         console.log(message,"m")
         if (message.reply_to){
          if(!await models.MessagesModel.find({
@@ -52,7 +73,7 @@ async function onConnection(socket, io) {
         const attachments = [];
         if (Array.isArray(message.attachments)) {
           for (const attachment of message.attachments.slice(0, 10)) {
-            const saved = await saveUpload(attachment.file, attachment.type, attachment.name, attachment.size);
+            const saved = await saveUpload(attachment.file, attachment.type, attachment.name, attachment.size, allowedDocTypes);
             if (saved) attachments.push(saved);
           }
         }
@@ -126,8 +147,90 @@ async function onConnection(socket, io) {
       ]);
       socket.emit("searchResults", { results: data, target: stream.target });
     });
-    socket.on("reportChat", (id) => {});
-    
+    socket.on("report", async ({ id, targetType, reason }) => {
+      if (!id || !["user", "chat", "message"].includes(targetType)) return;
+      try {
+        await new models.ReportsModel({
+          reporter: profile._id,
+          target: id,
+          targetType,
+          reason: xss(`${reason || ""}`),
+        }).save();
+      } catch (err) {
+        console.log(err);
+      }
+    });
+
+    socket.on("typing", ({ cid }) => {
+      if (!chatSet.has(cid)) return;
+      socket.to(cid).emit("typing", { cid, uid: profile._id.toString() });
+    });
+
+    socket.on("blockUser", async ({ id }) => {
+      if (!id || id.toString() === profile._id.toString()) return;
+      if (!profile.blocked.some((b) => b.toString() === id.toString())) {
+        profile.blocked.push(id);
+        await profile.save();
+      }
+      socket.emit("blocked", profile.blocked.map(String));
+    });
+
+    socket.on("unblockUser", async ({ id }) => {
+      if (!id) return;
+      profile.blocked = profile.blocked.filter((b) => b.toString() !== id.toString());
+      await profile.save();
+      socket.emit("blocked", profile.blocked.map(String));
+    });
+
+    socket.on("pinMessage", async ({ id, cid }) => {
+      const chat = await models.ChatsModel.findById(cid);
+      if (!chat || !chatSet.has(cid) || (chat.type === "group" && !isChatAdmin(chat))) return;
+      if (!chat.pinned.some((p) => p.toString() === id.toString())) {
+        chat.pinned.push(id);
+        await chat.save();
+      }
+      io.to(cid).emit("chat", { type: "chats", chats: [chat] });
+    });
+
+    socket.on("unpinMessage", async ({ id, cid }) => {
+      const chat = await models.ChatsModel.findById(cid);
+      if (!chat || !chatSet.has(cid) || (chat.type === "group" && !isChatAdmin(chat))) return;
+      chat.pinned = chat.pinned.filter((p) => p.toString() !== id.toString());
+      await chat.save();
+      io.to(cid).emit("chat", { type: "chats", chats: [chat] });
+    });
+
+    socket.on("reactMessage", async ({ id, cid, emoji }) => {
+      if (!chatSet.has(cid) || !emoji) return;
+      const message = await models.MessagesModel.findOne({ _id: id, chat: cid });
+      if (!message) return;
+      const uidStr = profile._id.toString();
+      let entry = message.reactions.find((r) => r.emoji === emoji);
+      if (entry) {
+        const idx = entry.users.findIndex((u) => u.toString() === uidStr);
+        if (idx !== -1) entry.users.splice(idx, 1);
+        else entry.users.push(profile._id);
+      } else {
+        message.reactions.push({ emoji, users: [profile._id] });
+      }
+      message.reactions = message.reactions.filter((r) => r.users.length > 0);
+      message.markModified("reactions");
+      await message.save();
+      io.to(cid).emit("reactMessage", { id: message._id, mid: message.mid, cid, reactions: message.reactions });
+    });
+
+    socket.on("deleteChat", async ({ id }) => {
+      const chat = await models.ChatsModel.findById(id);
+      if (!chat || !chatSet.has(id)) return;
+      if (chat.type === "group" && !isChatOwner(chat)) return;
+      const memberIds = (chat.users || []).map(String);
+      await models.MessagesModel.deleteMany({ chat: id });
+      await models.ChatsModel.findByIdAndDelete(id);
+      await models.UsersModel.updateMany({ _id: { $in: memberIds } }, { $pull: { Chats: id } });
+      io.to(id).emit("leaveChat", [id, true]);
+    });
+
+
     socket.on("deleteMessage", async ([mid, id, cid]) => {
       let success = null;
       console.log("delete")
@@ -140,7 +243,32 @@ async function onConnection(socket, io) {
       if (!success) success = { cid: cid, mid: mid, _id: id };
       socket.emit(`deleteMessage`, [success._id, success.mid, success.chat]);
     });
-    
+
+    socket.on("editMessage", async ({ id, cid, content }) => {
+      if (!chatSet.has(cid) || !content || !content.trim()) return;
+      const message = await models.MessagesModel.findOne({ _id: id, chat: cid });
+      if (!message || message.uid.toString() !== profile._id.toString()) return;
+      message.content = xss(content);
+      message.edited = true;
+      await message.save();
+      io.to(cid).emit("editMessage", { id: message._id, mid: message.mid, cid, content: message.content, edited: true });
+    });
+
+    socket.on("toggleStar", async ({ id }) => {
+      if (!id) return;
+      const already = profile.starred.some((s) => s.toString() === id.toString());
+      if (already) profile.starred = profile.starred.filter((s) => s.toString() !== id.toString());
+      else profile.starred.push(id);
+      await profile.save();
+      socket.emit("starred", profile.starred.map(String));
+    });
+
+    socket.on("getStarred", async () => {
+      const messages = await models.MessagesModel.find({ _id: { $in: profile.starred } }).sort({ createdAt: -1 });
+      socket.emit("starred", profile.starred.map(String));
+      socket.emit("starredMessages", messages);
+    });
+
     socket.on("leaveChat", async ({ id, del }) => {
       console.log("remove",id)
       if (chatSet.has(id)) {
@@ -312,7 +440,7 @@ async function onConnection(socket, io) {
     socket.on("createChatPrivate", async (stream) => {
     
       let user = await models.UsersModel.findById(stream.cid);
-      if (user && user._id != profile._id) {
+      if (user && user._id != profile._id && !user.blocked.some((b) => b.toString() === profile._id.toString())) {
         let data = await models.ChatsModel.findOne({
           type: "private",
           users: { $size: 2, $all: [profile._id, user._id] },

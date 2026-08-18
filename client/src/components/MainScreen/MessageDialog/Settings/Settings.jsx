@@ -7,7 +7,7 @@ import IconButton from "../../../ui/IconButton";
 import Button from "../../../ui/Button";
 import Avatar from "../../../ui/Avatar";
 import Switch from "../../../ui/Switch";
-import { THEMES, applyTheme, getStoredThemeId } from "../../../../theme";
+import { THEMES, applyTheme, getStoredThemeId, applyDarkMode, getStoredDarkMode } from "../../../../theme";
 import close from "/close.svg";
 
 function Section({ title, children }) {
@@ -25,6 +25,12 @@ export default function Settings(props) {
   const navigate = useNavigate();
   const [themeId, setThemeId] = useState(getStoredThemeId());
   const [reduceMotion, setReduceMotion] = useState(localStorage.getItem('lavender-reduce-motion') === 'true');
+  const [darkMode, setDarkMode] = useState(getStoredDarkMode());
+
+  const toggleDarkMode = (val) => {
+    setDarkMode(val);
+    applyDarkMode(val);
+  };
 
   const pickTheme = (id) => {
     applyTheme(id);
@@ -64,6 +70,13 @@ export default function Settings(props) {
         </button>
 
         <Section title="Appearance">
+          <div className="flex items-center justify-between px-3 py-3 border-b border-gray-100 dark:border-gray-700">
+            <div>
+              <div className="text-sm font-medium text-gray-700 dark:text-gray-200">Dark mode</div>
+              <div className="text-xs text-gray-400">Switch to a darker color scheme</div>
+            </div>
+            <Switch checked={darkMode} onChange={toggleDarkMode} label="Dark mode" />
+          </div>
           <div className="p-3 flex items-center gap-3 flex-wrap">
             {THEMES.map((t) => (
               <button

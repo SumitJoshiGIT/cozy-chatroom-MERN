@@ -12,10 +12,10 @@ export default function IconButton({ icon, alt = '', size = 'md', onClick, class
       onClick={onClick}
       disabled={disabled}
       aria-label={ariaLabel || alt}
-      className={`rounded-full ${s.btn} outline-none border-none flex items-center justify-center hover:bg-black/5 active:outline-none active:scale-95 transition-all
+      className={`rounded-full ${s.btn} outline-none border-none flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 active:outline-none active:scale-95 transition-all
         ${disabled ? 'opacity-30 pointer-events-none' : ''} ${className}`}
     >
-      <img className={`${s.icon} opacity-70`} src={icon} alt={alt} />
+      <img className={`${s.icon} opacity-70 dark:invert dark:opacity-80`} src={icon} alt={alt} />
     </button>
   );
 }

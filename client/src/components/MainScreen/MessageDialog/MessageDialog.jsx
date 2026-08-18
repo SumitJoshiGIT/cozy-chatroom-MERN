@@ -5,12 +5,14 @@ import ChatInfo from "./ChatInfo/ChatInfo";
 import UserInfo from "./UserInfo/UserInfo";
 import AddGroup from "./AddGroup/AddGroup";
 import Settings from "./Settings/Settings";
+import StarredMessages from "./StarredMessages";
 const dialogs={
     0:Messages,
     1:ChatInfo,
     2:UserInfo,
     4:AddGroup,
     5:Settings,
+    6:StarredMessages,
     3:({setDialog})=>{
       return <UserInfo setDialog={setDialog} infoPanel={{current:null}}/>}
     }

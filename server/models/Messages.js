@@ -37,6 +37,17 @@ const Messages=new mongoose.Schema
         },{_id:false})],
         default:[],
     },
+    edited:{
+        type:Boolean,
+        default:false,
+    },
+    reactions:{
+        type:[new mongoose.Schema({
+            emoji:String,
+            users:{type:[mongoose.Schema.Types.ObjectId], ref:'Users', default:[]},
+        },{_id:false})],
+        default:[],
+    },
 
 },
    {timestamps:true}

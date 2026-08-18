@@ -42,6 +42,14 @@ const Users=new mongoose.Schema
    contacts:{
       ref:'Users',
       type:[mongoose.Schema.Types.ObjectId]},
+   starred:{
+      ref:'Messages',
+      type:[mongoose.Schema.Types.ObjectId],
+      default:[]},
+   blocked:{
+      ref:'Users',
+      type:[mongoose.Schema.Types.ObjectId],
+      default:[]},
    color:{
       type:String,
       default:"#000000"

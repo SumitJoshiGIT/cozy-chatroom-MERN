@@ -25,7 +25,7 @@ export default function Signup(){
         <h2 className="text-2xl font-bold text-gray-800">Welcome back</h2>
         <p className="text-sm text-gray-400 mt-1">Sign in to keep the conversation going.</p>
      </div>
-     <Button as="a" variant="secondary" href={`${apiOrigin}/auth/google/oauth`} className="w-full py-2">
+     <Button as="a" variant="google" href={`${apiOrigin}/auth/google/oauth`} className="w-full py-2">
          Continue with Google
      </Button>
      <Divider>or</Divider>

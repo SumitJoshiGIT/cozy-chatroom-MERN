@@ -1,5 +1,6 @@
 import MessageBar from "./MessageBar/MessageBar";
 import Message from "./MessageBar/Message";
+import ForwardDialog from "./ForwardDialog";
 import React, {
   useRef,
   useEffect,
@@ -11,9 +12,17 @@ import { useCtx } from "../AppScreen";
 import TitleBar from "./TitleBar/TitleBar";
 import background from "/background.jpg";
 import icon from "/icon.svg";
+import { getWallpaper, setWallpaperFor } from "../../../wallpaper";
 export default function MessageDialog(props) {
-  const { Messages, chatID, scrollable, socket } = useCtx();
+  const { Messages, chatID, scrollable, socket, chatdata, userID, unpinMessage } = useCtx();
   const [reply, setReply] = useState();
+  const [edit, setEdit] = useState();
+  const [forward, setForward] = useState();
+  const [wallpaper, setWallpaper] = useState(() => getWallpaper(chatID.id));
+
+  useEffect(() => {
+    setWallpaper(getWallpaper(chatID.id));
+  }, [chatID.id]);
 
   const onScroll = useCallback(
     function () {
@@ -25,6 +34,17 @@ export default function MessageDialog(props) {
   );
 
   const m = Messages[chatID.id];
+  const chat = chatdata[chatID.id] || {};
+  const canPin = chat.type !== 'group' || (chat.admins||[]).includes(userID.current) || chat.owner===userID.current;
+
+  const messagesById = useMemo(() => {
+    const byId = {};
+    if (m) Object.values(m).forEach((message) => { byId[message._id] = message; });
+    return byId;
+  }, [m]);
+
+  const pinnedIds = chat.pinned || [];
+  const latestPinned = pinnedIds.length ? messagesById[pinnedIds[pinnedIds.length - 1]] : null;
 
   const dayLabel = (date) => {
     const now = new Date();
@@ -64,9 +84,11 @@ export default function MessageDialog(props) {
           item={message}
           setDialog={props.setDialog}
           setReply={setReply}
+          setEdit={setEdit}
+          setForward={setForward}
           infoPanel={props.infoPanel}
           reply_to={message.reply_to}
-          reply_data={m[message.reply_to]}
+          reply_data={messagesById[message.reply_to]}
           pre={pre}
         />
       );
@@ -76,10 +98,40 @@ export default function MessageDialog(props) {
   // console.log("ff",messageCache,chatID.id)
   return (
     <div
-      style={{ backgroundImage: `url(${background})`, backgroundRepeat: true }}
+      style={{ backgroundImage: wallpaper || `url(${background})`, backgroundRepeat: true }}
       className="w-full shadow-lg p-0 rounded-xl flex flex-1 h-full overflow-hidden flex-col items-center"
     >
-      {chatID.id && <TitleBar setDialog={props.setDialog} />}
+      {chatID.id && (
+        <TitleBar
+          setDialog={props.setDialog}
+          wallpaper={wallpaper}
+          setWallpaper={(css) => {
+            setWallpaperFor(chatID.id, css);
+            setWallpaper(css);
+          }}
+        />
+      )}
+      {chatID.id && latestPinned && (
+        <div className="w-full px-4 py-1.5 bg-white/90 dark:bg-gray-800/90 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2 text-xs">
+          <span>📌</span>
+          <div
+            onClick={() => {
+              const element = document.getElementById(latestPinned._id);
+              if (element) element.scrollIntoView({ block: "center" });
+            }}
+            className="flex-1 min-w-0 truncate cursor-pointer text-gray-600 dark:text-gray-300"
+          >
+            {latestPinned.content || "Pinned message"}
+            {pinnedIds.length > 1 && <span className="text-gray-400"> · +{pinnedIds.length - 1} more pinned</span>}
+          </div>
+          {canPin && (
+            <button
+              onClick={() => unpinMessage(latestPinned._id, chatID.id)}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
+            >✕</button>
+          )}
+        </div>
+      )}
       {!chatID.id ? (
         <div className="flex-1 w-full flex flex-col items-center justify-center animate-fade-in">
           <div className="flex flex-col items-center gap-3 bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg px-10 py-8">
@@ -97,7 +149,15 @@ export default function MessageDialog(props) {
           {rows}
         </div>
       )}
-      {chatID.id && <MessageBar setReply={setReply} reply={reply} />}
+      {chatID.id && (
+        <MessageBar
+          setReply={setReply}
+          reply={reply}
+          edit={edit}
+          setEdit={setEdit}
+        />
+      )}
+      {forward && <ForwardDialog item={forward} onClose={() => setForward()} />}
     </div>
   );
 }

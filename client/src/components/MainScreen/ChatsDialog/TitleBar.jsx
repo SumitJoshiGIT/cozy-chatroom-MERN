@@ -7,17 +7,37 @@ import SettingsButton from "./Settings.jsx";
 export default function (props){
     const {setMessageDialog}=useCtx();
 
-    return( <div style={props.style?{display:'block',width:'40px'}:{}} className="text-xl   rounded-xl mt-3 flex p-2 pb-0   justify-content items-center  w-full">
-         <IconButton icon={menu} alt="Toggle sidebar" onClick={()=>{props.setStyle((prev)=>!prev)}} />
-         <div className="w-full  flex flex-row justify-between">
-         <div className="flex items-end">
-          {props.style?null:<h1 className="text-xl font-bold text-gray-700">Messages</h1>}
-          </div>
-
-         <div className="flex flex-wrap w-fit h-fit items-center gap-1">
+    if (props.style) {
+      return (
+        <div className="flex flex-col items-center gap-2 w-full pb-3">
+          <IconButton icon={menu} alt="Expand sidebar" onClick={()=>{props.setStyle((prev)=>!prev)}} />
+          <div className="w-8 h-px bg-black/10 dark:bg-white/10" />
+          <button
+            onClick={()=>{setMessageDialog(6)}}
+            title="Starred messages"
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-amber-500 text-lg transition-colors"
+          >★</button>
           <SettingsButton/>
           <IconButton icon={add} alt="New group" onClick={()=>{setMessageDialog(4)}} />
-         </div>
         </div>
-    </div>);
+      );
+    }
+
+    return (
+      <div className="flex items-center justify-between w-full pb-3">
+        <div className="flex items-center gap-2">
+          <IconButton icon={menu} alt="Collapse sidebar" onClick={()=>{props.setStyle((prev)=>!prev)}} />
+          <h1 className="text-xl font-bold text-gray-700 dark:text-gray-100">Messages</h1>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={()=>{setMessageDialog(6)}}
+            title="Starred messages"
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-amber-500 text-lg transition-colors"
+          >★</button>
+          <SettingsButton/>
+          <IconButton icon={add} alt="New group" onClick={()=>{setMessageDialog(4)}} />
+        </div>
+      </div>
+    );
 }

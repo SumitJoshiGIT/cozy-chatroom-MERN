@@ -19,8 +19,13 @@ function ChatScreen(props) {
   const [Messages, setMessages] = useState({});
   const [chatdata, setChatdata] = useState({});
   const [contacts, setContacts] = useState(new Set());
+  const [starred, setStarred] = useState(new Set());
+  const [starredMessages, setStarredMessages] = useState([]);
+  const [blocked, setBlocked] = useState(new Set());
+  const [typingUsers, setTypingUsers] = useState({});
   const [messageDialog, setMessageDialog] = useState(0);
   const chatCache = useRef({ query: {}, chats: {} });
+  const typingTimers = useRef({});
 
   const navigate = useNavigate();
   const userID = useRef(null);
@@ -201,7 +206,66 @@ function ChatScreen(props) {
                 .objectStore("messages")
                 .delete(id);
             });
-  
+
+            socket.current.on("editMessage", ({ id, mid, cid, content, edited }) => {
+              setMessages((prev) => {
+                const store = { ...(prev || {}) };
+                const chatStore = { ...(store[cid] || {}) };
+                if (chatStore[mid]) {
+                  const updated = { ...chatStore[mid], content, edited };
+                  chatStore[mid] = updated;
+                  db.transaction("messages", "readwrite").objectStore("messages").put(updated);
+                }
+                store[cid] = chatStore;
+                return store;
+              });
+            });
+
+            socket.current.on("starred", (ids) => {
+              const idSet = new Set(ids);
+              setStarred(idSet);
+              setStarredMessages((prev) => prev.filter((m) => idSet.has(m._id)));
+            });
+
+            socket.current.on("starredMessages", (data) => {
+              setStarredMessages(data);
+            });
+
+            socket.current.on("blocked", (ids) => {
+              setBlocked(new Set(ids));
+            });
+
+            socket.current.on("typing", ({ cid, uid }) => {
+              if (uid === userID.current) return;
+              const key = `${cid}:${uid}`;
+              clearTimeout(typingTimers.current[key]);
+              setTypingUsers((prev) => ({
+                ...prev,
+                [cid]: { ...(prev[cid] || {}), [uid]: true },
+              }));
+              typingTimers.current[key] = setTimeout(() => {
+                setTypingUsers((prev) => {
+                  const chatTyping = { ...(prev[cid] || {}) };
+                  delete chatTyping[uid];
+                  return { ...prev, [cid]: chatTyping };
+                });
+              }, 3000);
+            });
+
+            socket.current.on("reactMessage", ({ mid, cid, reactions }) => {
+              setMessages((prev) => {
+                const store = { ...(prev || {}) };
+                const chatStore = { ...(store[cid] || {}) };
+                if (chatStore[mid]) {
+                  const updated = { ...chatStore[mid], reactions };
+                  chatStore[mid] = updated;
+                  db.transaction("messages", "readwrite").objectStore("messages").put(updated);
+                }
+                store[cid] = chatStore;
+                return store;
+              });
+            });
+
             socket.current.on("profile", async (data) => {
               if (data) {
                 if (data.img) data.img.src = `${apiOrigin}/${data.img.src}`;
@@ -292,6 +356,7 @@ function ChatScreen(props) {
         user = { ...user, ...data };
         if (data) {
           if (data.img) data.img.src = `${apiOrigin}/${data.img.src}`;
+          if (data.blocked) setBlocked(new Set(data.blocked.map(String)));
           db.transaction("meta", "readwrite")
             .objectStore("meta")
             .put({ _id: "user", data: user });
@@ -341,6 +406,21 @@ function ChatScreen(props) {
         chatCache,
         scrollable,
         chatID,
+        starred,
+        starredMessages,
+        toggleStar: (id) => socket.current.emit("toggleStar", { id }),
+        getStarred: () => socket.current.emit("getStarred", {}),
+        blocked,
+        toggleBlock: (id) =>
+          socket.current.emit(blocked.has(id) ? "unblockUser" : "blockUser", { id }),
+        report: (id, targetType, reason) =>
+          socket.current.emit("report", { id, targetType, reason }),
+        typingUsers,
+        emitTyping: (cid) => socket.current.emit("typing", { cid }),
+        pinMessage: (id, cid) => socket.current.emit("pinMessage", { id, cid }),
+        unpinMessage: (id, cid) => socket.current.emit("unpinMessage", { id, cid }),
+        reactMessage: (id, cid, emoji) => socket.current.emit("reactMessage", { id, cid, emoji }),
+        deleteChat: (id) => socket.current.emit("deleteChat", { id }),
       }}
     >
       <div className="h-screen w-screen flex flex-row overflow-hidden">

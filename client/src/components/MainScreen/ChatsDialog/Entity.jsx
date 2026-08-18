@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 import { useCtx } from "../AppScreen";
 import Avatar from "../../ui/Avatar";
@@ -22,7 +22,6 @@ export default function (props) {
   const [chatid, setId] = useState(props.id);
   let chat = chatdata[chatid];
   const [latest, setLatest] = useState("");
-  const hoverref=useRef();
   useEffect(()=>{
   if(chat.type=='private'){
     if(profiles[chat.sender]){
@@ -87,64 +86,52 @@ export default function (props) {
     : "";
 
   return (
-    <div onMouseEnter={()=>{
-      if(props.style==1)
-          hoverref.current.style.display='block';
-      }}
-   onMouseLeave={()=>{
-      if(props.style==1)hoverref.current.style.display='none';
-    }}
-
-    style={props.style?{'borderRadius':'100%',width:'fit-content',padding:0,height:'fit-content'}:{}}
-      className={`p-2 mb-0.5 flex items-center overflow-clip min-w-30 h-fit flex-1 rounded-lg transition-colors cursor-pointer ${active ? 'bg-purple-100' : 'hover:bg-gray-100'}`}
+    <div
       onClick={onClick}
+      title={props.style ? (chat.name || "Unnamed") : undefined}
+      className={`flex items-center cursor-pointer transition-colors ${
+        props.style
+          ? 'justify-center w-12 h-12 shrink-0 mb-1 rounded-full'
+          : 'gap-3 w-full px-2 py-2 mb-0.5 rounded-lg'
+      } ${active ? 'bg-purple-100 dark:bg-gray-700' : 'hover:bg-gray-100 dark:hover:bg-gray-700/60'}`}
     >
-      <div className=" h-fit  w-fit min-w-4 flex  justify-content items-center">
-        <Avatar
-          src={chat.img && chat.img.src}
-          kind={chat.type == "group" ? "group" : "user"}
-          style={props.style?{width:'32px',height:'32px',minWidth:'10px'}:{}}
-        />
-          <div ref={hoverref} className="overflow-hidden hidden fixed text-ellipses text-xs font-bold left-10 bg-white p-2 rounded-md shadow w-54 ">
-            {chat.name || "Unnamed"}
-          </div>
-      </div>
+      <Avatar
+        src={chat.img && chat.img.src}
+        kind={chat.type == "group" ? "group" : "user"}
+        size={props.style ? 'sm' : 'md'}
+        className={props.style && active ? 'ring-2 ring-purple-400' : ''}
+      />
 
-      {props.style?null
-          :<div className="w-full z-20 rounded-md overflow-hidden pl-4">
-
-        <div className="flex justify-between ">
-          <div  className="overflow-hidden text-ellipses text-base w-54 font-semibold text-gray-800">
-            {chat.name || "Unnamed"}
-          </div>
-
-        </div>
-        <div className="text-gray-400 text-base flex">
-          {latest && (
-            <div className="flex  justify-between overflow-hidden w-full">
-              <div className="truncate w-56 text-sm ">
-                {previewName && (
-                  <span
-                    style={{
-                      color: latest.uid == userID.current ? undefined : (profiles[latest.uid] ? profiles[latest.uid].color : undefined),
-                    }}
-                    className={latest.uid == userID.current ? "text-gray-400" : ""}
-                  >
-                    {previewName}:{" "}
-                  </span>
-                )}
-                <span className="overflow-clip text-ellipsis text-gray-500">
-                  {previewText}
-                </span>
-              </div>
-              <span className="text-xs flex items-center ml-1 mr-1 text-gray-400 shrink-0">
+      {!props.style && (
+        <div className="min-w-0 flex-1">
+          <div className="flex justify-between items-baseline gap-2">
+            <div className="truncate text-base font-semibold text-gray-800 dark:text-gray-100">
+              {chat.name || "Unnamed"}
+            </div>
+            {latest && (
+              <span className="text-xs text-gray-400 shrink-0">
                 {pad(new Date(latest.updatedAt).getHours())}:
                 {pad(new Date(latest.updatedAt).getMinutes())}
               </span>
+            )}
+          </div>
+          {latest && (
+            <div className="truncate text-sm text-gray-500">
+              {previewName && (
+                <span
+                  style={{
+                    color: latest.uid == userID.current ? undefined : (profiles[latest.uid] ? profiles[latest.uid].color : undefined),
+                  }}
+                  className={latest.uid == userID.current ? "text-gray-400" : ""}
+                >
+                  {previewName}:{" "}
+                </span>
+              )}
+              <span>{previewText}</span>
             </div>
           )}
         </div>
-      </div>}
+      )}
     </div>
   );
 }

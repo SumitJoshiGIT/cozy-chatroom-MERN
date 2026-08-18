@@ -16,6 +16,24 @@ export function getStoredThemeId() {
   }
 }
 
+const DARK_STORAGE_KEY = 'lavender-dark-mode';
+
+export function getStoredDarkMode() {
+  try {
+    return localStorage.getItem(DARK_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function applyDarkMode(enabled) {
+  document.documentElement.classList.toggle('dark', enabled);
+  try {
+    localStorage.setItem(DARK_STORAGE_KEY, enabled ? 'true' : 'false');
+  } catch {}
+  return enabled;
+}
+
 export function applyTheme(id) {
   const theme = THEMES.find((t) => t.id === id) || THEMES[0];
   const root = document.documentElement;
