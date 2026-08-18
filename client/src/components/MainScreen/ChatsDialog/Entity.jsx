@@ -1,8 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 
 import { useCtx } from "../AppScreen";
-import single from "/single.svg";
-import group from "/group.svg";
+import Avatar from "../../ui/Avatar";
 
 export default function (props) {
   const {
@@ -17,6 +16,7 @@ export default function (props) {
     setChatID,
     privateChats,
     setMessageDialog,
+    userID,
   } = useCtx();
   
   const [chatid, setId] = useState(props.id);
@@ -77,6 +77,15 @@ export default function (props) {
     }
   }, [chatid]);
 
+  const active = chatID.id === chat._id;
+  const pad = (n) => n.toString().padStart(2, "0");
+  const previewText = latest
+    ? (latest.content || (latest.attachments && latest.attachments.length ? "📷 Photo" : ""))
+    : "";
+  const previewName = latest
+    ? (latest.uid == userID.current ? "You" : (profiles[latest.uid] ? profiles[latest.uid].name : ""))
+    : "";
+
   return (
     <div onMouseEnter={()=>{
       if(props.style==1)
@@ -85,19 +94,17 @@ export default function (props) {
    onMouseLeave={()=>{
       if(props.style==1)hoverref.current.style.display='none';
     }}
-    
+
     style={props.style?{'borderRadius':'100%',width:'fit-content',padding:0,height:'fit-content'}:{}}
-      className="p-2 m-1 mb-2 shadow-md   flex  overflow-clip min-w-30 hover:bg-gray-100 h-fit flex-1 bg-white  rounded-lg opacity-90"
+      className={`p-2 mb-0.5 flex items-center overflow-clip min-w-30 h-fit flex-1 rounded-lg transition-colors cursor-pointer ${active ? 'bg-purple-100' : 'hover:bg-gray-100'}`}
       onClick={onClick}
     >
       <div className=" h-fit  w-fit min-w-4 flex  justify-content items-center">
-        <img 
-          className=" min-w-12 w-12 h-12 border  rounded-full bg-white"
-          src={
-            (chat.img && chat.img.src) || chat.type != "group" ? single : group
-          }
+        <Avatar
+          src={chat.img && chat.img.src}
+          kind={chat.type == "group" ? "group" : "user"}
           style={props.style?{width:'32px',height:'32px',minWidth:'10px'}:{}}
-        ></img>
+        />
           <div ref={hoverref} className="overflow-hidden hidden fixed text-ellipses text-xs font-bold left-10 bg-white p-2 rounded-md shadow w-54 ">
             {chat.name || "Unnamed"}
           </div>
@@ -105,9 +112,9 @@ export default function (props) {
 
       {props.style?null
           :<div className="w-full z-20 rounded-md overflow-hidden pl-4">
-        
+
         <div className="flex justify-between ">
-          <div  className="overflow-hidden text-ellipses text-lg w-54 font-semibold">
+          <div  className="overflow-hidden text-ellipses text-base w-54 font-semibold text-gray-800">
             {chat.name || "Unnamed"}
           </div>
 
@@ -116,22 +123,23 @@ export default function (props) {
           {latest && (
             <div className="flex  justify-between overflow-hidden w-full">
               <div className="truncate w-56 text-sm ">
-                <span
-                  style={{
-                    color: profiles[latest.uid]
-                      ? profiles[latest.uid].color
-                      : "",
-                  }}
-                >
-                  {profiles[latest.uid] ? profiles[latest.uid].name : " "}:
-                </span>
-                <span className="overflow-clip text-ellipsis ">
-                  {latest.content}
+                {previewName && (
+                  <span
+                    style={{
+                      color: latest.uid == userID.current ? undefined : (profiles[latest.uid] ? profiles[latest.uid].color : undefined),
+                    }}
+                    className={latest.uid == userID.current ? "text-gray-400" : ""}
+                  >
+                    {previewName}:{" "}
+                  </span>
+                )}
+                <span className="overflow-clip text-ellipsis text-gray-500">
+                  {previewText}
                 </span>
               </div>
-              <span className="text-xs flex items-center ml-1 mr-1">
-                {new Date(latest.updatedAt).getHours()}:
-                {new Date(latest.updatedAt).getMinutes()}
+              <span className="text-xs flex items-center ml-1 mr-1 text-gray-400 shrink-0">
+                {pad(new Date(latest.updatedAt).getHours())}:
+                {pad(new Date(latest.updatedAt).getMinutes())}
               </span>
             </div>
           )}

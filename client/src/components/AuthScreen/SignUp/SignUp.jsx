@@ -1,66 +1,56 @@
-import React, { useState ,useEffect} from "react";
-import { Navigate } from "react-router-dom";
-import {post,get} from '../../Axios'
+import React, { useState } from "react";
+import {post} from '../../Axios'
+import { apiOrigin } from '../../../apiOrigin';
 import { Link,useNavigate } from 'react-router-dom';
+import Card from "../../ui/Card";
+import Button from "../../ui/Button";
+import Divider from "../../ui/Divider";
+import { TextField } from "../../ui/TextField";
+import { useToast } from "../../ui/Toast";
 
 export default function Signup(){
-  
-   const [email,setEmail]=useState("thor@gmail.com");
-   const [password,setPassword]=useState("power@guM.com");
-   const [confirmPassword,setConfirmPassword]=useState("power@guM.com");
+
+   const [email,setEmail]=useState("");
+   const [password,setPassword]=useState("");
+   const [confirmPassword,setConfirmPassword]=useState("");
    const navigate=useNavigate();
-   
-   async function SignUp(){
-    if(confirmPassword!=password)alert("Passwords do not match"); 
-    else{ 
+   const toast=useToast();
+
+   async function SignUp(event){
+    event.preventDefault();
+    if(confirmPassword!=password)toast.error("Passwords do not match");
+    else{
     const data={
       email:email,
       password:password
-    }  
-    const result=await post("/auth/signup",data).catch(err=>{console.log('err')});
+    }
+    const result=await post("/auth/signup",data);
     if(result.status){
-     console.log("success")
      navigate("/auth/verify")
    }
-    else alert(result.message);
+    else toast.error(result.message);
     }
    }
-   
-
-   useEffect(()=>{  
-      
-   const handleMessage=(event)=>{
-    if(event.origin==origin){
-     const data=event.data 
-     if(data.type=="verify"){
-       if(data.success)props.setAuthenticated(true);
-    } 
-    } 
-    else return;
-  }
-     window.addEventListener('message',handleMessage);
-     return ()=>{
-      window.removeEventListener('message',handleMessage);}
-   }
-     ,[])
 
  return (
-    <div className="flex justify-center items-center flex-col bg-white p-10 rounded-lg shadow-lg">
-     <div className="text-3xl mb-2">
-        <h2 className="font-bold mb-2">Welcome Aboard </h2>
+    <Card className="flex justify-center items-center flex-col p-8 sm:p-10 gap-3 w-full max-w-sm">
+     <div className="text-center mb-1">
+        <h2 className="text-2xl font-bold text-gray-800">Welcome aboard</h2>
+        <p className="text-sm text-gray-400 mt-1">Create an account to get started.</p>
      </div>
-     <div className="flex flex-col mb-2">
-     <input placeholder="Enter your email address" className=" shadow rounded-full font-roboto   mt-1 mb-2 pl-4 pr-4 text-ellipses p-1 border text-gray-600 bg-gray-100"  onChange={(e)=>setEmail(e.target.value)} value={email}></input>
-     <input placeholder="Enter your password" className=" shadow rounded-full font-roboto   mt-1 mb-2 pl-4 pr-4 text-ellipses p-1 border text-gray-600 bg-gray-100"  onChange={(e)=>setPassword(e.target.value)} value={password} />
-     <input placeholder="Confirm your password" className=" shadow rounded-full font-roboto   mt-1 mb-2 pl-4 pr-4 text-ellipses p-1 border text-gray-600 bg-gray-100"  onChange={(e)=>setConfirmPassword(e.target.value)} value={confirmPassword} />
-     </div>
-     <button className='mt-2 p-1  bg-black text-white shadow w-fit rounded-full pl-3 pr-3 shadow text-sm' onClick={SignUp}>Continue</button>
-     <div className="text-sm m-1 w-full items-center font-semibold flex justify-center">Or</div>
- 
-     <Link className=" bg-blue-400 pl-3 pr-3 mb-3 shadow rounded-full p-1 "  to="/auth/signin">
-           SignIn with Google
-     </Link>
-     <div className="text-base">Already have an account? <Link to="/auth/signIn">SignIn</Link></div>
-    </div>
+     <form onSubmit={SignUp} className="w-full flex flex-col gap-3">
+       <TextField placeholder="Email address" type="email" className="w-full" onChange={(e)=>setEmail(e.target.value)} value={email} />
+       <TextField placeholder="Password" type="password" className="w-full" onChange={(e)=>setPassword(e.target.value)} value={password} />
+       <TextField placeholder="Confirm password" type="password" className="w-full" onChange={(e)=>setConfirmPassword(e.target.value)} value={confirmPassword} />
+       <Button type="submit" className="mt-1 py-2">Continue</Button>
+     </form>
+
+     <Divider>or</Divider>
+
+     <Button as="a" variant="secondary" href={`${apiOrigin}/auth/google/oauth`} className="w-full py-2">
+           Continue with Google
+     </Button>
+     <div className="text-sm text-gray-500">Already have an account? <Link to="/auth/signin" className="text-[var(--accent-dark)] font-semibold">Sign in</Link></div>
+    </Card>
  )
  }

@@ -1,7 +1,8 @@
 import React from "react";
 import { useState, useEffect, useCallback, useRef } from "react";
-import Placeholder from "/person.svg";
 import { useCtx } from "../../AppScreen";
+import { apiOrigin } from "../../../../apiOrigin";
+import Avatar from "../../../ui/Avatar";
 import forward from "/forward.svg";
 import report from "/report.svg";
 import reply from "/reply.svg";
@@ -21,6 +22,10 @@ export default function (props) {
   const profile = profiles[messageItem.uid] || {};
   const time = new Date(messageItem.updatedAt);
   const flag = messageItem.uid == userID.current;
+  const repliedMessage = props.reply_to
+    ? (Messages[chatID.id] || {})[props.reply_to] || messageItem.replyToMessage
+    : null;
+  const repliedProfile = repliedMessage ? profiles[repliedMessage.uid] || {} : {};
 
   useEffect(() => {
     if (messageItem.status == "⧖") {
@@ -37,6 +42,7 @@ export default function (props) {
           content: messageItem.content,
           replace: messageItem._id,
           reply_to: messageItem.reply_to,
+          attachments: messageItem.attachments,
         }
       );
     }
@@ -90,73 +96,80 @@ export default function (props) {
     ]);
   };
 
-  //<div style={{backgroundColor:((flag)?'#EEFFDE':'white'),maxWidth:'500px'}} className="relative top-1 h-3 w-2 message-clip"></div>
+  const grouped = props.pre == messageItem.uid;
+  const pad = (n) => n.toString().padStart(2, "0");
   return (
     <div
       id={messageItem._id}
-      className={`w-full flex mt-3 justify-${flag ? "end" : "start"}`}
+      className={`w-full flex ${grouped ? "mt-0.5" : "mt-2.5"} justify-${flag ? "end" : "start"} animate-fade-in-up`}
     >
-      <div className="mr-4  w-8 h-full flex ">
-        {props.pre != messageItem.uid && (
+      <div className="mr-2 w-7 h-full flex shrink-0">
+        {!grouped && !flag && (
           <button
             onClick={onClick}
-            className="rounded-full h-fit p-1 border border-gray-300"
+            className="rounded-full h-fit"
           >
-            <img
-              className="min-h-8 min-w-8 w-8  box-shadow border-1 h-8 rounded-full"
-              src={profile.img || Placeholder}
-              style={{ backgroundColor: "white" }}
-            ></img>
+            <Avatar src={profile.img && profile.img.src} size="xs" />
           </button>
         )}
       </div>
 
-      <div onContextMenu={handleRight}>
+      <div onContextMenu={handleRight} className="relative max-w-[75%] md:max-w-[60%]">
         <div
-          style={{
-            backgroundColor: flag ? "#EEFFDE" : "white",
-            maxWidth: "500px",
-          }}
-          className=" p-2 pb-1 pl-2 flex flex-wrap pr-2 rounded-xl border shadow"
+          style={{ backgroundColor: flag ? "#DCF8C6" : "white" }}
+          className={`px-2.5 py-1.5 shadow-sm relative
+            ${flag
+              ? `rounded-2xl ${grouped ? "rounded-tr-2xl" : "rounded-tr-md"}`
+              : `rounded-2xl ${grouped ? "rounded-tl-2xl" : "rounded-tl-md"}`}
+          `}
         >
           <div>
-            {props.pre != messageItem.uid && (
+            {!grouped && !flag && (
               <div
                 style={{ color: profile.color }}
-                className="text-xs font-bold"
+                className="text-xs font-bold mb-0.5"
               >
                 {profile.name}
               </div>
             )}
 
-            {props.reply_to ? (
+            {repliedMessage ? (
               <div
                 onClick={() => {
                   const element = document.getElementById(props.reply_to);
-                  console.log(Messages, Messages[chatID.id][props.reply_to]);
+                  if (element) element.scrollIntoView({ block: "center" });
                 }}
-                className="h-fit overflow-clip rounded-lg p-1  bg-white shadow-sm ring-1 ring-green-200  w-full   text-xs"
+                className="cursor-pointer flex flex-col overflow-clip rounded-md pl-2 py-1 mb-1 bg-black/5 border-l-2 text-xs"
+                style={{ borderColor: repliedProfile.color || '#a78bfa' }}
               >
-                <p className="text-ellipses font-bold">Sumit Joshi</p>
-                <span className="text-ellipses overflow-hidden max-w-sm h-16">
-                  Reply to Someone Else
+                <p style={{ color: repliedProfile.color }} className="truncate font-bold">{repliedProfile.name || "Unknown"}</p>
+                <span className="truncate text-gray-500">
+                  {repliedMessage.content}
                 </span>
               </div>
             ) : null}
 
-            <pre
-              style={{ fontFamily: "system-ui" }}
-              className="h-fit text-sm flex-1 text-justify text-sans"
-            >
-              {messageItem.content}
-            </pre>
-
-            <div className="float-right  sticky w-fit flex ml-1 h-fit flex-wrap items-end  text-gray-400 text-xs">
-              <div className=" text-grey">
-                {time.getHours()}:{time.getMinutes()}{" "}
+            {messageItem.attachments && messageItem.attachments.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-1">
+                {messageItem.attachments.map((a, idx) => (
+                  <a key={idx} href={`${apiOrigin}/${a.src}`} target="_blank" rel="noreferrer">
+                    <img src={`${apiOrigin}/${a.src}`} alt={a.name} className="max-h-40 max-w-52 rounded-lg object-cover" />
+                  </a>
+                ))}
               </div>
-              <div className="text-xs ml-1">{messageItem.status}</div>
-            </div>
+            )}
+
+            {messageItem.content && (
+              <div className="flex items-end gap-2 flex-wrap">
+                <span className="text-sm text-gray-800 whitespace-pre-wrap break-words flex-1 min-w-0">
+                  {messageItem.content}
+                </span>
+                <span className="shrink-0 flex items-center gap-0.5 text-[0.65rem] text-gray-400 ml-auto -mb-0.5">
+                  {pad(time.getHours())}:{pad(time.getMinutes())}
+                  {flag && <span className={messageItem.status === "✔✔" ? "text-purple-500" : ""}>{messageItem.status}</span>}
+                </span>
+              </div>
+            )}
           </div>
         </div>
         <div
@@ -167,43 +180,43 @@ export default function (props) {
           onMouseLeave={() => {
             contextref.current.style.display = "none";
           }}
-          className="font-semibold  text-gray-500 absolute text-sm w-fit p-2 h-fit hidden bg-white shadow-lg rounded-lg  opacity-80"
+          className="font-semibold text-gray-600 absolute text-sm w-40 py-2 h-fit hidden bg-white shadow-lg rounded-lg z-20"
         >
           <button
             onClick={replyHandle}
-            className="m-1 items-center rounded-lg pl-2 pr-2 flex w-full"
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100"
           >
-            <img src={reply} className="w-4 h-6  mr-1"></img>
+            <img src={reply} className="w-4 h-4"></img>
             <div>Reply</div>
           </button>
           <button
             onClick={copyHandle}
-            className="m-1 items-center rounded-lg  pl-2 pr-2 flex w-full"
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100"
           >
-            <img src={copy} className="w-4 h-6 mr-1 mt-1"></img>
+            <img src={copy} className="w-4 h-4"></img>
             <div>Copy Text</div>
           </button>
           <button
             onClick={forwardHandle}
-            className="m-1 items-center rounded-lg  pl-2 pr-2 flex w-full "
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100"
           >
-            <img src={forward} className="w-4 h-6  mr-1"></img>
+            <img src={forward} className="w-4 h-4"></img>
             <div>Forward</div>
           </button>
 
           <button
             onClick={deleteHandle}
-            className="m-1 items-center rounded-lg  pl-2 pr-2 flex w-full "
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100"
           >
-            <img src={del} className="w-4 h-6  mr-1"></img>
+            <img src={del} className="w-4 h-4"></img>
             <div>Delete</div>
           </button>
 
           <button
             onClick={reportHandle}
-            className="m-1 items-center rounded-lg  pl-2 pr-2 flex w-full "
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100"
           >
-            <img src={report} className="w-4 h-6  mr-1"></img>
+            <img src={report} className="w-4 h-4"></img>
             <div>Report</div>
           </button>
         </div>

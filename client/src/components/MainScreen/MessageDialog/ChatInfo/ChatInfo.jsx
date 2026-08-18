@@ -2,43 +2,43 @@ import background from '/background.jpg'
 import single from "/single.svg";
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { useCtx } from "../../AppScreen.jsx";
-import edit from "/edit.svg";
 import ImageInput from "../../ImageInput.jsx";
+import Card from "../../../ui/Card.jsx";
+import IconButton from "../../../ui/IconButton.jsx";
+import { TextField, TextArea } from "../../../ui/TextField.jsx";
 import Members from "./Members.jsx";
 import Media from './Media.jsx'
+import ComingSoon from "../../../ui/ComingSoon.jsx";
 import close from '/close.svg'
 const Tabs={
   1:Members,
-  0:Media
+  0:Media,
+  2:() => <ComingSoon title="Permissions" body="Fine-grained member permissions are on the way." />,
 }
 export default function (props) {
   const { chatdata, privateChats,socket,setMessageDialog, chatID, profiles, userID } = useCtx();
-  const about = useRef();
-  const chatname = useRef();
   let chat = chatdata[chatID.id] || {};
-  const [aboutSt, setAbout] = useState(chat.about || "null");
+  const [aboutSt, setAbout] = useState(chat.about || "");
   const [chatnameSt, setName] = useState(chat.name || "");
-  const [username, setUsername] = useState(chat.users || []);
-  const [active,setActive]=useState(Number(!chat.type==='group'));
+  const [username, setUsername] = useState(chat.username || '');
+  const [active,setActive]=useState(0);
   useEffect(() => {
-    setAbout(chat.about || "null");
+    setAbout(chat.about || "");
     setName(chat.name || "");
-    setUsername(chat.username || '');  
+    setUsername(chat.username || '');
     setActive(0)
   }, [chat]);
   const admin =
-    userID.current in (chat.admins || []) || userID.current == chat.owner;
+    (chat.admins || []).includes(userID.current) || userID.current == chat.owner;
   const fileform = useRef({});
   const ActiveTab=Tabs[active];
-  
+
   return (
-    <div  className="mt-0 rounded-xl shadow max-w-xl bg-white flex-1 h-full flex-col flex">
-      <button onClick={()=>setMessageDialog(0)} className="w-fit fixed m-3 h-fit ">
-        <img className="w-6 h-6" src={close}/>
-      </button>
+    <Card className="mt-0 max-w-xl flex-1 h-full flex-col flex">
+      <IconButton icon={close} alt="Close" onClick={()=>setMessageDialog(0)} className="w-fit bg-white fixed m-3 h-fit shadow-sm" />
       <div style={{
           backgroundImage:`url(${background})`,
-        
+
         }} className="bg-gray-200 rounded-t-xl shadow-sm pl-10 w-full h-44 ">
 
         <div   className="relative top-20 border-1 w-fit h-fit flex rounded-full">
@@ -49,81 +49,68 @@ export default function (props) {
             callback={() => {
               socket.current.emit("updateChat", {
                 cid: chat._id,
-                img: fileform.current,
+                img: {
+                  type: fileform.current.type,
+                  name: fileform.current.name,
+                  size: fileform.current.size,
+                },
+                file: fileform.current.file,
               });
             }}
           />
         </div>
       </div>
-      <div className="h-fit pb-6 mt-8 flex  p-4 flex-col">
-        <div className=" flex font-bold w-full items-baseline">
-          <input
-            ref={chatname}
-            onChange={(event) => setName(event.target.value)}
-            onBlur={() => {
-              socket.current.emit("updateChat", {
-                cid: chatID.id,
-                name: chatname.current.value,
-              });
-            }}
-            style={{ borderColor: chat.color }}
-            className=" word-wrap overflow-hidden text-ellipsis min-w-32 border-l-4  mr-1 pl-2 text-bold rounded w-fit text-start  mt-4 text-2xl outline-none"
-            value={chatnameSt}
-            
-          />
-          
-        </div>
-            <input
-            ref={chatname}
-            onChange={(event) => setUsername(event.target.value)}
-            onBlur={() => {
-              socket.current.emit("updateChat", {
-                cid: chatID.id,
-                name: chatname.current.value,
-              });
-            }}
-            style={{ borderColor: chat.color }}
-            className=" overflow-hidden text-ellipsis min-w-32   mr-1 text-gray-400 text-sm rounded w-fit text-start   outline-none"
-            value={`@${username}`}
-            
-          />
+      <div className="h-fit pb-6 mt-8 flex p-4 flex-col gap-2">
+        <TextField
+          disabled={!admin}
+          onChange={(event) => setName(event.target.value)}
+          onBlur={() => {
+            socket.current.emit("updateChat", {
+              cid: chatID.id,
+              name: chatnameSt,
+            });
+          }}
+          accentColor={chat.color}
+          inputClassName="text-2xl font-bold w-fit"
+          value={chatnameSt}
+        />
 
-            
-        <div className="  w-full  mt-4 text-gray-400 items-baseline text-base ">
-          <textarea
-            ref={about}
-            onChange={(event) => {
-              {
-                setAbout(event.target.value);
-              }
-            }}
-            onBlur={() => {
-              socket.current.emit("updateChat", {
-                cid: chatID.id,
-                about: about.current.value,
-              });
-            }}
-            className="outline-none   max-w-md  max-h-16  mr-1 rounded w-fit resize-none overflow-scroll text-start   text-base "
-            value={aboutSt}
-            
-          />
+        <TextField
+          disabled={!admin}
+          onChange={(event) => setUsername(event.target.value.replace(/^@/, ''))}
+          onBlur={() => {
+            socket.current.emit("updateChat", {
+              cid: chatID.id,
+              username: username,
+            });
+          }}
+          inputClassName="text-gray-400 text-sm w-fit"
+          value={`@${username}`}
+        />
 
-         
-        </div>
+        <TextArea
+          disabled={!admin}
+          onChange={(event) => setAbout(event.target.value)}
+          onBlur={() => {
+            socket.current.emit("updateChat", {
+              cid: chatID.id,
+              about: aboutSt,
+            });
+          }}
+          className="mt-2 max-w-md h-20 w-full"
+          value={aboutSt}
+          placeholder="About"
+        />
        </div>
-       <div>  
-        {(
-          <div>
-            <div className=" items-center flex w-full shadow-md text-gray-500">
-              {chat.type == "group"&&<button className="flex-1  p-2 max-w-32 outline-none    font-semibold pb-1 pt-1 rounded-md  " onClick={()=>setActive(1)}>Members</button>}
-              <button className="flex-1 p-2 max-w-32 outline-none  active:bg-blue-100  font-semibold pt-1 pb-1 rounded-md " onClick={()=>setActive(0)}>Media</button>
-              {admin&&<button className=" max-w-32 flex-1  outline-none   font-semibold rounded-md p-2 pt-1 pb-1" onClick={()=>setActive(2)}>Permissions</button>} 
+       <div>
+            <div className="items-center flex w-full border-b text-gray-500 text-sm font-semibold">
+              {chat.type == "group"&&<button className={`flex-1 p-2 pb-2.5 transition-colors ${active===1?'text-purple-600 border-b-2 border-purple-400':'hover:text-gray-600'}`} onClick={()=>setActive(1)}>Members</button>}
+              <button className={`flex-1 p-2 pb-2.5 transition-colors ${active===0?'text-purple-600 border-b-2 border-purple-400':'hover:text-gray-600'}`} onClick={()=>setActive(0)}>Media</button>
+              {admin&&<button className={`flex-1 p-2 pb-2.5 transition-colors ${active===2?'text-purple-600 border-b-2 border-purple-400':'hover:text-gray-600'}`} onClick={()=>setActive(2)}>Permissions</button>}
             </div>
-          </div>
-        ) }
-       {chat&&<ActiveTab chat={chat} admin={admin}/>}
-  
+       {chat&&ActiveTab&&<ActiveTab chat={chat} admin={admin}/>}
+
       </div>
-    </div>
+    </Card>
   );
 }

@@ -1,22 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useCallback } from "react";
 import { useCtx } from "../AppScreen";
-import single from "/single.svg";
-import down from "/down.svg";
-import up from "/up.svg";
+import IconButton from "../../ui/IconButton";
 import setting from "/setting.svg"
+
 export default function (props) {
-  const { profiles, userID, setMessageDialog } = useCtx();
-  const profile = profiles[userID.current] || {};
+  const { setMessageDialog } = useCtx();
   const onClick = useCallback(function () {
-    setMessageDialog(3);
+    setMessageDialog(5);
   }, []);
-  const src = profile.img ? profile.img.src : single;
-  return (
-        <button
-          className="rounded-full border-1  outline-none border-none focus:outline-none focus:border-none"
-          onClick={onClick} 
-        >
-          <img className=" h-6  shadow-sm rounded-full" src={setting} />
-        </button>
-  );
+  return <IconButton icon={setting} alt="Settings" onClick={onClick} />;
 }

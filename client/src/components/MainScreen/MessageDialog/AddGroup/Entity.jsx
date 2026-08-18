@@ -1,31 +1,28 @@
-import {useRef,useState,useEffect, useCallback} from "react";
+import { useCallback } from "react";
 import { useCtx } from "../../AppScreen";
-import single from '/single.svg';
-import group from '/group.svg';
+import Avatar from "../../../ui/Avatar";
 
 export default function (props){
    const {profiles}=useCtx();
    const contact=profiles[props.id]
+   const selected = props.members.has(props.id);
    const onClick=useCallback((event)=>{
-     props.setMembers(new Set([...props.members,props.id]))
-   })
-   
+     const next=new Set(props.members);
+     if(next.has(props.id)) next.delete(props.id);
+     else next.add(props.id);
+     props.setMembers(next)
+   },[props.members])
 
-   return (contact)?<div className=" mt-2 mb-3 m-1 shadow-sm flex min-w-62 hover:bg-gray-100 p-3 bg-white h-auto w-auto rounded-md" onClick={onClick}>
-         <div className=" h-full flex ">
-           <img className=" w-12 h-8 border rounded-full"
-            src={(contact.img&&contact.img.src)||single} style={{backgroundColor:'white'}}>
-           </img>
+   return (contact)?
+      <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-purple-50 cursor-pointer transition-colors" onClick={onClick}>
+         <Avatar src={contact.img && contact.img.src} size="sm" />
+         <div className="flex-1 min-w-0">
+           <div className="truncate font-medium text-gray-800">{contact.name||"Unnamed"}</div>
+           {contact.username && <div className="truncate text-xs text-gray-400">@{contact.username}</div>}
          </div>
-         <div className="w-full rounded-md pl-4">
-           <div className="flex justify-between ">
-             <div className="truncate   text-lg font-semibold">{contact.name||"Unnamed"}</div>
-           </div>
-           <div className="text-gray-400 text-base">
-           </div>
+         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${selected ? 'bg-purple-500 border-purple-500' : 'border-gray-300'}`}>
+           {selected && <div className="w-2 h-2 rounded-full bg-white" />}
          </div>
-         <div className="m-2 h-full flex ">
-            
-         </div>
-       </div>:<></>
+       </div>
+    :<></>
 }

@@ -1,58 +1,22 @@
 import axios from 'axios';
-
-const origin =window.location.hostname==('localhost')?"http://localhost:3000":"https://cozy-chatroom-mern.onrender.com";
-
-async function fetchCsrfToken() {
-  try {
-    const response = await axios.get(`${origin}/auth/token`);
-    return response.data.token;
-  } catch (error) {
-    console.error("Error fetching CSRF token:", error);
-    throw error; 
-  }
-}
+import { apiOrigin } from '../apiOrigin';
 
 export async function post(endpoint, body) {
-  console.log(body,'p')
-  const csrfToken = await fetchCsrfToken(); 
-    
-  const config = {
-    method: 'post',
-    url: `${origin}${endpoint}`,
-    data: body,
-    headers: {
-      'X-CSRF-Token': csrfToken,
-    },
-    withCredentials: true
-  };
-
   try {
-    const response = await axios(config);
+    const response = await axios.post(`${apiOrigin}${endpoint}`, body, { withCredentials: true });
     return response.data;
   } catch (error) {
     console.error("Error making POST request:", error);
-    return { error: error.message || 'An error occurred' };
+    return error.response ? error.response.data : { status: false, message: 'Network error' };
   }
 }
 
-
 export async function get(endpoint, params) {
-  const config = {
-    method: 'get',
-    url: `${origin}${endpoint}`,
-    
-    withCredentials: true,
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    params: params
-  };
-
   try {
-    const response = await axios(config);
+    const response = await axios.get(`${apiOrigin}${endpoint}`, { withCredentials: true, params });
     return response.data;
   } catch (error) {
     console.error("Error making GET request:", error);
-    return { error: error.message || 'An error occurred' };
+    return error.response ? error.response.data : { status: false, message: 'Network error' };
   }
 }

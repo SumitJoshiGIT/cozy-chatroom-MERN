@@ -4,12 +4,13 @@ import Messages from "./Messages";
 import ChatInfo from "./ChatInfo/ChatInfo";
 import UserInfo from "./UserInfo/UserInfo";
 import AddGroup from "./AddGroup/AddGroup";
-//import UserInfo from "../ChatsDialog/UserInfo/UserInfo";
+import Settings from "./Settings/Settings";
 const dialogs={
     0:Messages,
     1:ChatInfo,
     2:UserInfo,
     4:AddGroup,
+    5:Settings,
     3:({setDialog})=>{
       return <UserInfo setDialog={setDialog} infoPanel={{current:null}}/>}
     }

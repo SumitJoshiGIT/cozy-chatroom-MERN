@@ -1,15 +1,16 @@
+import { Outlet, Link } from 'react-router-dom';
+import icon from '/icon.svg';
 
-import {useState,createContext, useEffect} from 'react'
-import { Outlet,useNavigate } from 'react-router-dom';
-
-export default function(props){
-      const [authenticated,setAuthenticated]=useState(false)
-      useEffect(()=>{
-       if(authenticated)useNavigate('/app')
-      },[authenticated])
-      return (
-         <div className="flex h-screen w-screen justify-center items-center">
-                <Outlet context={setAuthenticated}/>
-         </div>
-         )
-     }
+export default function AuthScreen() {
+  return (
+    <div className="flex flex-col h-screen w-screen justify-center items-center gap-6 px-4">
+      <Link to="/" className="flex items-center gap-2 animate-fade-in-up">
+        <img src={icon} alt="" className="h-10 w-auto" />
+        <span className="font-display text-3xl text-purple-950">Lavender</span>
+      </Link>
+      <div className="animate-fade-in-up w-full flex justify-center" style={{ animationDelay: '80ms', animationFillMode: 'backwards' }}>
+        <Outlet />
+      </div>
+    </div>
+  )
+}

@@ -6,9 +6,9 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 *.env
+!.env.example
 node_modules
-dist
-public/
+/client/dist
 dist-ssr
 *.local
 .netlify

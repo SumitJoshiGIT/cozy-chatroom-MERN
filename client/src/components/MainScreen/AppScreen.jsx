@@ -10,6 +10,7 @@ import {
 } from "react";
 import { io } from "socket.io-client";
 import { useNavigate } from "react-router-dom";
+import { apiOrigin } from "../../apiOrigin";
 const Context = createContext();
 
 function ChatScreen(props) {
@@ -26,14 +27,14 @@ function ChatScreen(props) {
   const privateChats = useRef({});
   const scrollable = useRef(null);
   const socket = useRef(
-    io((window.location.hostname=='localhost')?"http://localhost:3000":"https://cozy-chatroom-mern.onrender.com", {
+    io(apiOrigin, {
       withCredentials: true,
       transports: ["websocket"],
       reconnection: true,
       reconnectionAttempts: 4,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      timeout: 2000,
+      timeout: 5000,
     })
   );
 
@@ -203,7 +204,7 @@ function ChatScreen(props) {
   
             socket.current.on("profile", async (data) => {
               if (data) {
-                if (data.img) data.img.src = `${location.origin}/${data.img.src}`;
+                if (data.img) data.img.src = `${apiOrigin}/${data.img.src}`;
                 setProfiles((prev) => {
                   const obj = { ...prev };
                   obj[data._id] = { ...(obj[data._id] || {}), ...data };
@@ -215,14 +216,14 @@ function ChatScreen(props) {
                   .put(data);
               }
             });
-            socket.current.on("logout", (data) => location.reload());
-   
-            
+
+
             
             socket.current.on("chat", async (datagroup) => {
               let dict = {};
               await Promise.all(
                 datagroup.chats.map(async (data) => {
+                  if (data.img) data.img.src = `${apiOrigin}/${data.img.src}`;
                   if (data.type == "private") {
                     data.users.forEach((uid) => {
                       if (uid != userID.current) {
@@ -261,7 +262,15 @@ function ChatScreen(props) {
               setChatdata(chatCache.current[datagroup.type] || {});
             });
 
+            socket.current.on("contacts", (data) => {
+              setContacts(new Set(data));
+              data.forEach((uid) => {
+                if (!profiles[uid]) socket.current.emit("getProfile", { uid });
+              });
+            });
+
             socket.current.emit("chats", { type: "upchats" });
+            socket.current.emit("contacts", {});
             setChatdata(chatCache.current["chats"] || {});
           };
 
@@ -282,7 +291,7 @@ function ChatScreen(props) {
       socket.current.on("auth", async (data) => {
         user = { ...user, ...data };
         if (data) {
-          if (data.img) data.img.src = `${location.origin}/${data.img.src}`;
+          if (data.img) data.img.src = `${apiOrigin}/${data.img.src}`;
           db.transaction("meta", "readwrite")
             .objectStore("meta")
             .put({ _id: "user", data: user });

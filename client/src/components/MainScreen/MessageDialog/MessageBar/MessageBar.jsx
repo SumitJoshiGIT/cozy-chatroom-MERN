@@ -1,11 +1,16 @@
 import React, { useMemo } from "react";
 import { useState, useRef, useEffect } from "react";
 import { useCtx } from "../../AppScreen";
+import IconButton from "../../../ui/IconButton";
+import { useToast } from "../../../ui/Toast";
 import attachment from "/attachment.svg";
 import send from "/send.svg";
 import reply from "/reply.svg";
+const maxSize = 2*1024*1024;
+const acceptedTypes = ['image/jpeg','image/png','image/jpg','image/webp','image/svg','image/svg+xml'];
 const MessageBar = React.memo((props) => {
   const { setMessages, db, scrollable, profiles, userID, chatID, socket }=useCtx();
+  const toast=useToast();
 
   const [message, setMessage] = useState("");
   const ref = useRef(null);
@@ -18,6 +23,7 @@ const MessageBar = React.memo((props) => {
 
   async function SendMessage(event) {
     event.preventDefault();
+    if (!message.trim() && files.length === 0) return;
     const id = new Date().toUTCString();
     const r2 = props.reply ? props.reply[0]._id : null;
     let msg = {
@@ -40,10 +46,10 @@ const MessageBar = React.memo((props) => {
       return obj;
     });
     
-    console.log(msg, "ME");
     setMessage("");
+    setFiles([]);
 
-    if (reply) props.setReply();
+    if (props.reply) props.setReply();
     scrollable.current.scrollTo(0, scrollable.current.scrollHeight);
   }
   useEffect(() => {
@@ -72,61 +78,64 @@ const MessageBar = React.memo((props) => {
       );
     } else return null;
   }, [props.reply]);
-  useEffect(()=>{console.log(files)},files)
   function handleChange(event) {
-           if(filesRef.current.files){
-            console.log(filesRef.current.files,"ff")
-             const files=filesRef.current.files.map((file)=>{
-              if(file){
-                const reader=newFileReader()
-                reader.onloadend=()=>{
-                 const result=reader.result.split(',')[1];
-                 const filename=file.name;
-                 const type=file.type;
-               
-              setFiles((prev)=>[...prev,...result])
-                }
-                
-              return reader.readAsDataURL(file);
-              }  
-            })
-            console.log(files)
-            setFiles(files);
-          }}
-  
+           const selected = Array.from(filesRef.current.files || []);
+           selected.forEach((file) => {
+              if (!acceptedTypes.includes(file.type)) {
+                toast.error(`${file.name}: unsupported file type`);
+                return;
+              }
+              if (file.size > maxSize) {
+                toast.error(`${file.name}: file too large (max 2MB)`);
+                return;
+              }
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const data = reader.result.split(',')[1];
+                setFiles((prev) => [...prev, { file: data, name: file.name, type: file.type, size: file.size }]);
+              };
+              reader.readAsDataURL(file);
+           });
+           filesRef.current.value = '';
+          }
+  function removeFile(idx) {
+    setFiles((prev) => prev.filter((_, i) => i !== idx));
+  }
 
+
+  const canSend = message.trim() || files.length > 0;
   return (
-    <div className=" bg-white m-4 flex flex-col justify-center items-center bg-transparent overflow-x-hidden  shadow-md p-1 rounded-lg w-full max-w-xl ">
-      {files.map((file,idx)=>{
-        
-        return <div key={idx} className="bg-red">Huje</div>
-
-      })}
+    <div className="flex flex-col justify-center items-center px-4 pb-4 pt-1 w-full max-w-xl mx-auto">
+      {files.length > 0 && (
+        <div className="flex flex-wrap gap-2 w-full mb-2">
+          {files.map((file,idx)=>(
+            <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden shadow-sm border border-gray-200">
+              <img src={`data:${file.type};base64,${file.file}`} alt={file.name} className="w-full h-full object-cover" />
+              <button
+                type="button"
+                onClick={()=>removeFile(idx)}
+                className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/60 text-white text-xs leading-none flex items-center justify-center"
+              >×</button>
+            </div>
+          ))}
+        </div>
+      )}
       {replyTo}
       {user &&(chatID.type=='user'||user.Chats.includes(chatID.id))? (
-        <div className="p-1 rounded-md shadow-md  bg-gray-100 w-full flex items-end">
-          <button
-            onClick={() => {
-              filesRef.current.click();
-              }}
-            className="h-fit m-2 rounded-full"
-          >
-            <div>
-              <input
-                ref={filesRef}
-                type="file"
-                onChange={handleChange}
-                multiple
-                className="hidden "
-
-              />
-              <img className="h-6 " src={attachment} />
-            </div>
-          </button>
+        <div className="p-1.5 rounded-3xl shadow-md bg-white border border-gray-100 w-full flex items-end gap-1">
+          <input
+            ref={filesRef}
+            type="file"
+            onChange={handleChange}
+            multiple
+            className="hidden"
+          />
+          <IconButton icon={attachment} alt="Attach file" size="lg" onClick={() => filesRef.current.click()} />
           <textarea
             rows="1"
             onKeyDown={(event) => {
-              if (event.ctrlKey && event.key == "Enter") {
+              if (event.key == "Enter" && !event.shiftKey) {
+                event.preventDefault();
                 SendMessage(event);
                 ref.current.style.height = "auto";
               }
@@ -137,17 +146,19 @@ const MessageBar = React.memo((props) => {
 
               ref.current.style.height = ref.current.scrollHeight + "px";
             }}
-            className="rounded-md pt-3 align-bottom bg-gray-100 text-sm max-h-36 w-full outline-none border-none min-h-11 h-auto  p-2 text-gray-500 resize-none"
+            className="pt-2 pb-1.5 align-bottom bg-transparent text-sm max-h-36 w-full outline-none border-none min-h-9 h-auto text-gray-700 resize-none placeholder-gray-400"
             placeholder="Write your message..."
             type="text"
             onChange={(event) => setMessage(() => event.target.value)}
             value={message}
           ></textarea>
-          <img
-            src={send}
-            className=" w-10 mb-2 h-6 "
+          <IconButton
+            icon={send}
+            alt="Send"
+            size="lg"
             onClick={SendMessage}
-          ></img>
+            disabled={!canSend}
+          />
         </div>
       ) : null}
     </div>

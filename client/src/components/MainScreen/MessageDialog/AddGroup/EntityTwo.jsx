@@ -1,27 +1,30 @@
-import {useRef,useState,useEffect, useCallback} from "react";
+import { useCallback } from "react";
 import { useCtx } from "../../AppScreen";
-import single from '/single.svg';
-import group from '/group.svg';
+import Avatar from "../../../ui/Avatar";
 import close from '/close.svg'
+
 export default function (props){
    const {profiles}=useCtx();
    const contact=profiles[props.id]
    const onClick=useCallback((event)=>{
-     const obj=props.members;
-     obj.delete(props.id);
-     console.log(obj)
-     props.setMembers(new Set(...obj))          
+     event.stopPropagation();
+     const next=new Set(props.members);
+     next.delete(props.id);
+     props.setMembers(next)
    },[props.members])
-   
 
-   return (contact)?<div className="  m-1 shadow-sm flex   hover:bg-gray-100 p-1 bg-white text-xs h-fit w-auto rounded-full">
-         <div className="w-fit rounded-md ">
-           <div className="flex justify-center items-baseline ">
-             <div className="truncate text-xs  font-semibold">{contact.name||"Unnamed"}</div>
-           </div>
-           <div className="text-gray-400 text-base">
-           </div>
+   return (contact)?
+      <div className="flex flex-col items-center gap-1 w-14 shrink-0 animate-pop-in">
+         <div className="relative">
+           <Avatar src={contact.img && contact.img.src} size="sm" />
+           <button
+             onClick={onClick}
+             className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-gray-500 hover:bg-red-500 transition-colors flex items-center justify-center"
+           >
+             <img className="w-2 h-2 invert" src={close} alt="Remove" />
+           </button>
          </div>
-         <button className="rounded-full ml-1" onClick={onClick}><img className='h-3'src={close}></img></button>
-         </div>:<></>
+         <div className="truncate text-xs text-gray-600 w-full text-center">{contact.name||"Unnamed"}</div>
+       </div>
+    :<></>
 }
