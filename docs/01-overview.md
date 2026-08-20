@@ -9,7 +9,8 @@ by an emailed OTP) or with Google OAuth, and can then:
 - start a direct conversation with anyone they've previously messaged (their "contacts"),
 - create a named group with a photo and multiple members,
 - send text messages, reply to a specific message (with a quoted preview), and
-  send image attachments with an inline thumbnail preview,
+  send image attachments (with an inline thumbnail preview) or document
+  attachments (PDF, Word/Excel/PowerPoint, text, CSV, zip),
 - see messages arrive live, with delivery/read ticks (`✔` / `✔✔`),
 - edit or forward a message they've sent, and star messages to find them later,
 - react to a message with an emoji, pin an important message to the top of a
@@ -45,6 +46,7 @@ what's a good next project if you're extending this codebase:
 | Promote / demote / remove members | ✅ implemented |
 | Reply-to (with quoted preview) | ✅ implemented |
 | Image attachments with thumbnail preview | ✅ implemented |
+| Document attachments (PDF, Office, text, CSV, zip) | ✅ implemented |
 | Message delete | ✅ implemented |
 | Leave chat / delete private chat | ✅ implemented |
 | Live profile editing (name, username, bio, avatar) | ✅ implemented |

@@ -7,9 +7,10 @@ someone prepping for a system-design interview and wants a real (imperfect, evol
 codebase to reason about instead of a textbook example.
 
 Each chapter is self-contained but builds on the ones before it. If you're prepping
-for an interview and short on time, read 01, 02, 04, 05 and 09 — that covers the
-architecture, the two hardest subsystems (auth, real-time messaging), and a set of
-questions you could plausibly be asked about a project like this.
+for an interview and short on time, read 01, 02, 04, 05, then the whole
+[Interview Prep section](./09-interview-prep.md) (chapters 9–13) — that covers the
+architecture, the two hardest subsystems (auth, real-time messaging), and a full
+system-design-interview workup built specifically around this project.
 
 ## Chapters
 
@@ -21,16 +22,24 @@ questions you could plausibly be asked about a project like this.
 6. [File & Image Uploads](./06-file-uploads.md) — how attachments and avatars move through the system, and the tradeoffs of that design.
 7. [Frontend Architecture](./07-frontend-architecture.md) — the single-Context state model, routing, the UI component system, and theming.
 8. [Deployment](./08-deployment.md) — how the two services are packaged and run independently, and what a production deploy needs.
-9. [Interview Prep: Q&A](./09-interview-prep.md) — the questions this project is likely to prompt, with grounded answers and honest tradeoffs.
-10. [Feature Roadmap](./10-roadmap.md) — where the 2026 messaging-app market has moved, the resulting gap analysis, and a build order sequenced by implementation difficulty against this codebase.
+
+### Interview Prep
+
+9. [Overview](./09-interview-prep.md) — how to use this section, and a study plan by however much time you have.
+10. [Core Q&A](./10-interview-qna.md) — "walk me through X" and "why did you do Y," grounded in the real implementation.
+11. [System Design Deep Dive](./11-interview-system-design.md) — requirements, real capacity-estimation numbers, a component breakdown, and a from-scratch scaling path, using this codebase as the worked example.
+12. [Tradeoffs & Alternatives](./12-interview-tradeoffs.md) — every consequential decision in the codebase, head-to-head against its real alternative.
+13. [Mock Interview & Practice](./13-interview-practice.md) — a full worked mock-interview transcript plus practice prompts by category.
+
+14. [Feature Roadmap](./14-roadmap.md) — where the 2026 messaging-app market has moved, the resulting gap analysis, and a build order sequenced by implementation difficulty against this codebase.
 
 ## A note on accuracy
 
-Chapters 1–9 aren't marketing copy for an idealized version of the app — they
+Chapters 1–13 aren't marketing copy for an idealized version of the app — they
 describe the system as it actually exists in this repository right now, including
 the corners that were cut and the things that are still on the roadmap (called out
 explicitly in each chapter, and summarized in [Chapter 9](./09-interview-prep.md)).
 Where a design decision looks unusual, the docs try to say *why*, and whether it's
-a deliberate tradeoff or a known piece of debt. [Chapter 10](./10-roadmap.md) is the
+a deliberate tradeoff or a known piece of debt. [Chapter 14](./14-roadmap.md) is the
 one forward-looking exception — it's explicitly a proposal, not a description of
 what's built.

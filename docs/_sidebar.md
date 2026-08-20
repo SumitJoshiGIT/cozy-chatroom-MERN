@@ -9,7 +9,15 @@
   - [6. File & Image Uploads](06-file-uploads.md)
   - [7. Frontend Architecture](07-frontend-architecture.md)
   - [8. Deployment](08-deployment.md)
-  - [9. Interview Prep: Q&A](09-interview-prep.md)
-  - [10. Feature Roadmap](10-roadmap.md)
+
+- Interview Prep
+  - [9. Overview](09-interview-prep.md)
+  - [10. Core Q&A](10-interview-qna.md)
+  - [11. System Design Deep Dive](11-interview-system-design.md)
+  - [12. Tradeoffs & Alternatives](12-interview-tradeoffs.md)
+  - [13. Mock Interview & Practice](13-interview-practice.md)
+
+- Chapters
+  - [14. Feature Roadmap](14-roadmap.md)
 
 - [↩ Back to repo](https://github.com/SumitJoshiGIT/cozy-chatroom-MERN)

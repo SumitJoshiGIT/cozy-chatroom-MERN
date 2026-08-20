@@ -96,4 +96,5 @@ scale":
   plain VM serving `client/dist` directly would not.
 
 These are exactly the kind of gaps worth being able to name proactively in a
-system-design interview — see [Chapter 9](./09-interview-prep.md).
+system-design interview — see the [Interview Prep section](./09-interview-prep.md),
+particularly [Chapter 11](./11-interview-system-design.md).

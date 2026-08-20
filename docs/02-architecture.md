@@ -34,8 +34,9 @@ flowchart LR
 That's the whole system. There's no message queue, no cache layer, no microservices —
 one Node process owns both the REST auth endpoints and the Socket.IO server, backed
 by one MongoDB database. That's a deliberate simplicity choice appropriate to the
-current scale, not an oversight — see [Chapter 9](./09-interview-prep.md) for how
-you'd talk about scaling it past this point.
+current scale, not an oversight — see
+[Chapter 11](./11-interview-system-design.md#5-scaling-path-1-instance--many) for
+how you'd talk about scaling it past this point.
 
 ## Why client and server are separate deployables
 
