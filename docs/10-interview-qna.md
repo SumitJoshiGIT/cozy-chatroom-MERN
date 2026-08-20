@@ -200,7 +200,7 @@ In rough priority order, being specific rather than saying "more testing":
    documented as one, but worth re-evaluating if the app's trust boundary changes.
 6. **No read receipts, push notifications, message threading, or polls yet** —
    tracked with a full gap analysis and build order in
-   [Chapter 14](./14-roadmap.md), since by this point in the project the
+   [Chapter 15](./15-roadmap.md), since by this point in the project the
    lower-hanging feature gaps (reactions, pinning, typing indicators, block/report)
    have already shipped.
 

@@ -22,7 +22,7 @@ an honest feature-status/roadmap breakdown. This README is just the quickstart.
 - Block / report a user, delete a chat or group
 - Live profile editing, per-chat wallpaper, dark mode, accent theming
 
-See the [feature status table](https://sumitjoshigit.github.io/cozy-chatroom-MERN/#/01-overview) for what's shipped vs. still on the [roadmap](https://sumitjoshigit.github.io/cozy-chatroom-MERN/#/14-roadmap).
+See the [feature status table](https://sumitjoshigit.github.io/cozy-chatroom-MERN/#/01-overview) for what's shipped vs. still on the [roadmap](https://sumitjoshigit.github.io/cozy-chatroom-MERN/#/15-roadmap).
 
 Prepping for a system-design interview around this project? The docs have a
 dedicated [Interview Prep section](https://sumitjoshigit.github.io/cozy-chatroom-MERN/#/09-interview-prep) —

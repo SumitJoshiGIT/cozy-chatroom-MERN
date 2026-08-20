@@ -8,7 +8,7 @@ codebase to reason about instead of a textbook example.
 
 Each chapter is self-contained but builds on the ones before it. If you're prepping
 for an interview and short on time, read 01, 02, 04, 05, then the whole
-[Interview Prep section](./09-interview-prep.md) (chapters 9–13) — that covers the
+[Interview Prep section](./09-interview-prep.md) (chapters 9–14) — that covers the
 architecture, the two hardest subsystems (auth, real-time messaging), and a full
 system-design-interview workup built specifically around this project.
 
@@ -30,8 +30,9 @@ system-design-interview workup built specifically around this project.
 11. [System Design Deep Dive](./11-interview-system-design.md) — requirements, real capacity-estimation numbers, a component breakdown, and a from-scratch scaling path, using this codebase as the worked example.
 12. [Tradeoffs & Alternatives](./12-interview-tradeoffs.md) — every consequential decision in the codebase, head-to-head against its real alternative.
 13. [Mock Interview & Practice](./13-interview-practice.md) — a full worked mock-interview transcript plus practice prompts by category.
+14. [An Ideal, Web-Scale Design](./14-interview-ideal-design.md) — a greenfield architecture for a WhatsApp/Discord-scale version of this app, and a mapping back to Lavender's real components.
 
-14. [Feature Roadmap](./14-roadmap.md) — where the 2026 messaging-app market has moved, the resulting gap analysis, and a build order sequenced by implementation difficulty against this codebase.
+15. [Feature Roadmap](./15-roadmap.md) — where the 2026 messaging-app market has moved, the resulting gap analysis, and a build order sequenced by implementation difficulty against this codebase.
 
 ## A note on accuracy
 
@@ -40,6 +41,7 @@ describe the system as it actually exists in this repository right now, includin
 the corners that were cut and the things that are still on the roadmap (called out
 explicitly in each chapter, and summarized in [Chapter 9](./09-interview-prep.md)).
 Where a design decision looks unusual, the docs try to say *why*, and whether it's
-a deliberate tradeoff or a known piece of debt. [Chapter 14](./14-roadmap.md) is the
-one forward-looking exception — it's explicitly a proposal, not a description of
-what's built.
+a deliberate tradeoff or a known piece of debt. [Chapter 14](./14-interview-ideal-design.md)
+and [Chapter 15](./15-roadmap.md) are the two forward-looking exceptions — both are
+explicitly proposals (a greenfield thought exercise and a build roadmap,
+respectively), not descriptions of what's built.

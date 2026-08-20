@@ -16,8 +16,9 @@
   - [11. System Design Deep Dive](11-interview-system-design.md)
   - [12. Tradeoffs & Alternatives](12-interview-tradeoffs.md)
   - [13. Mock Interview & Practice](13-interview-practice.md)
+  - [14. An Ideal, Web-Scale Design](14-interview-ideal-design.md)
 
 - Chapters
-  - [14. Feature Roadmap](14-roadmap.md)
+  - [15. Feature Roadmap](15-roadmap.md)
 
 - [↩ Back to repo](https://github.com/SumitJoshiGIT/cozy-chatroom-MERN)

@@ -8,7 +8,7 @@ file/line pointer back to the earlier chapters wherever it matters, because "I
 built this, and here's specifically what I'd change" is a stronger answer than
 reciting facts about WebSockets in the abstract.
 
-The four chapters cover different interview *shapes*, because "system design
+This section covers different interview *shapes*, because "system design
 interview" isn't one format:
 
 | Chapter | Interview shape it prepares you for |
@@ -17,6 +17,7 @@ interview" isn't one format:
 | [11. System Design Deep Dive](./11-interview-system-design.md) | "Design a chat app" from a blank whiteboard — requirements, capacity estimation, component breakdown, and a from-scratch scaling path — using Lavender's real numbers and real (including unfixed) gaps as the worked example. |
 | [12. Tradeoffs & Alternatives](./12-interview-tradeoffs.md) | "Why not X instead?" — head-to-head comparisons for every consequential decision in the codebase, framed as decision tables you can defend or attack. |
 | [13. Mock Interview & Practice](./13-interview-practice.md) | A full worked mock-interview transcript, plus unanswered practice prompts by category (design, data modeling, scaling, security, behavioral) for you to rehearse against before the real thing. |
+| [14. An Ideal, Web-Scale Design](./14-interview-ideal-design.md) | "If you had no legacy code, how would you build this for 500M users?" — a greenfield answer distinct from Chapter 11's incremental one, and how to explain when *not* to reach for it. |
 
 ## How to use this section
 
