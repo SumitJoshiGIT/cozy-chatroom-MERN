@@ -24,6 +24,7 @@ if (!process.env.SESSION_SECRET) {
 }
 
 const app = express();
+if (isProduction) app.set('trust proxy', 1);
 const server = createServer(app);
 const io = new Server(server, { cors: { origin: clientOrigin, credentials: true } });
 
