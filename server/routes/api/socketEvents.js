@@ -1,4 +1,5 @@
 const models = require("../../models/exports");
+const { consumeToken } = require("../../utils/socketAuthTokens");
 const ObjectID = require("mongoose").Types.ObjectId;
 const fs = require("fs");
 const path = require("path");
@@ -38,18 +39,10 @@ async function saveUpload(base64, mimeType, name, size, extraTypes) {
 async function onConnection(socket, io) {
   let profile = null;
   try {
-    const pid = socket.handshake.session.passport.user._id;
+    const tokenUserId = consumeToken(socket.handshake.auth && socket.handshake.auth.token);
+    const pid = tokenUserId || socket.handshake.session.passport.user._id;
     profile = await models.UsersModel.findById(pid);
-    if (!profile) console.warn('[socket auth] session had passport.user but findById returned nothing', { pid: String(pid) });
-  } catch (err) {
-    console.warn('[socket auth]', {
-      sessionID: socket.handshake.sessionID || null,
-      hasSession: !!socket.handshake.session,
-      hasPassport: !!(socket.handshake.session && socket.handshake.session.passport),
-      hasCookieHeader: !!socket.handshake.headers.cookie,
-      err: err.message,
-    });
-  }
+  } catch (err) {}
 
   socket.emit("auth", profile ? profile : null);
 

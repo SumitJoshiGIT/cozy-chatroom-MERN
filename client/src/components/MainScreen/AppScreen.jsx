@@ -13,6 +13,21 @@ import { useNavigate } from "react-router-dom";
 import { apiOrigin } from "../../apiOrigin";
 const Context = createContext();
 
+function takeAuthToken() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("st");
+  if (token) {
+    params.delete("st");
+    const search = params.toString();
+    window.history.replaceState(
+      {},
+      "",
+      window.location.pathname + (search ? `?${search}` : "") + window.location.hash
+    );
+  }
+  return token;
+}
+
 function ChatScreen(props) {
   const [profiles, setProfiles] = useState({});
   const [chatID, setChatID] = useState({ id: false, type: null });
@@ -40,6 +55,7 @@ function ChatScreen(props) {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       timeout: 5000,
+      auth: { token: takeAuthToken() },
     })
   );
 
