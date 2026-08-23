@@ -11,22 +11,8 @@ import {
 import { io } from "socket.io-client";
 import { useNavigate } from "react-router-dom";
 import { apiOrigin } from "../../apiOrigin";
+import { captureAuthTokenFromUrl, getStoredAuthToken } from "../../socketAuthToken";
 const Context = createContext();
-
-function takeAuthToken() {
-  const params = new URLSearchParams(window.location.search);
-  const token = params.get("st");
-  if (token) {
-    params.delete("st");
-    const search = params.toString();
-    window.history.replaceState(
-      {},
-      "",
-      window.location.pathname + (search ? `?${search}` : "") + window.location.hash
-    );
-  }
-  return token;
-}
 
 function ChatScreen(props) {
   const [profiles, setProfiles] = useState({});
@@ -47,16 +33,19 @@ function ChatScreen(props) {
   const privateChats = useRef({});
   const scrollable = useRef(null);
   const socket = useRef(
-    io(apiOrigin, {
-      withCredentials: true,
-      transports: ["websocket"],
-      reconnection: true,
-      reconnectionAttempts: 4,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 5000,
-      auth: { token: takeAuthToken() },
-    })
+    (() => {
+      captureAuthTokenFromUrl();
+      return io(apiOrigin, {
+        withCredentials: true,
+        transports: ["websocket"],
+        reconnection: true,
+        reconnectionAttempts: 4,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 5000,
+        auth: (cb) => cb({ token: getStoredAuthToken() }),
+      });
+    })()
   );
 
   const [db, setDb] = useState(null);

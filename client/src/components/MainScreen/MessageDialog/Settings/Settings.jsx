@@ -8,6 +8,7 @@ import Button from "../../../ui/Button";
 import Avatar from "../../../ui/Avatar";
 import Switch from "../../../ui/Switch";
 import { THEMES, applyTheme, getStoredThemeId, applyDarkMode, getStoredDarkMode } from "../../../../theme";
+import { clearStoredAuthToken } from "../../../../socketAuthToken";
 import close from "/close.svg";
 
 function Section({ title, children }) {
@@ -45,6 +46,7 @@ export default function Settings(props) {
 
   const logout = async () => {
     await post('/auth/logout');
+    clearStoredAuthToken();
     socket.current.disconnect();
     navigate('/auth/signin');
   };

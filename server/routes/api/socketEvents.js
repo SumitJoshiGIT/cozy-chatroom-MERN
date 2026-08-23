@@ -1,5 +1,5 @@
 const models = require("../../models/exports");
-const { consumeToken } = require("../../utils/socketAuthTokens");
+const { verifyToken } = require("../../utils/socketAuthTokens");
 const ObjectID = require("mongoose").Types.ObjectId;
 const fs = require("fs");
 const path = require("path");
@@ -39,7 +39,7 @@ async function saveUpload(base64, mimeType, name, size, extraTypes) {
 async function onConnection(socket, io) {
   let profile = null;
   try {
-    const tokenUserId = consumeToken(socket.handshake.auth && socket.handshake.auth.token);
+    const tokenUserId = verifyToken(socket.handshake.auth && socket.handshake.auth.token);
     const pid = tokenUserId || socket.handshake.session.passport.user._id;
     profile = await models.UsersModel.findById(pid);
   } catch (err) {}

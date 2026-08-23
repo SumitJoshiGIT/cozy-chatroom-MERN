@@ -9,6 +9,7 @@ import Button from "../../../ui/Button";
 import { TextField, TextArea } from "../../../ui/TextField";
 import { useToast } from "../../../ui/Toast";
 import { downloadFile } from "../../../../download";
+import { clearStoredAuthToken } from "../../../../socketAuthToken";
 import background from '/background.jpg'
 import single from '/single.svg'
 import close from '/close.svg'
@@ -104,6 +105,7 @@ export default function (props){
       {admin && (
         <Button variant="danger" className="mt-4 self-start" onClick={async () => {
             await post('/auth/logout');
+            clearStoredAuthToken();
             socket.current.disconnect();
             navigate('/auth/signin');
           }}>
