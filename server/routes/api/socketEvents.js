@@ -40,8 +40,16 @@ async function onConnection(socket, io) {
   try {
     const pid = socket.handshake.session.passport.user._id;
     profile = await models.UsersModel.findById(pid);
-  
-  } catch (err) {}
+    if (!profile) console.warn('[socket auth] session had passport.user but findById returned nothing', { pid: String(pid) });
+  } catch (err) {
+    console.warn('[socket auth]', {
+      sessionID: socket.handshake.sessionID || null,
+      hasSession: !!socket.handshake.session,
+      hasPassport: !!(socket.handshake.session && socket.handshake.session.passport),
+      hasCookieHeader: !!socket.handshake.headers.cookie,
+      err: err.message,
+    });
+  }
 
   socket.emit("auth", profile ? profile : null);
 
