@@ -17,6 +17,10 @@ const Context = createContext();
 function ChatScreen(props) {
   const [profiles, setProfiles] = useState({});
   const [chatID, setChatID] = useState({ id: false, type: null });
+  const chatIDRef = useRef(chatID);
+  useEffect(() => {
+    chatIDRef.current = chatID;
+  }, [chatID]);
   const [Messages, setMessages] = useState({});
   const [chatdata, setChatdata] = useState({});
   const [contacts, setContacts] = useState(new Set());
@@ -27,6 +31,7 @@ function ChatScreen(props) {
   const [messageDialog, setMessageDialog] = useState(0);
   const [chatsLoaded, setChatsLoaded] = useState(false);
   const [loadedChats, setLoadedChats] = useState(new Set());
+  const [contactsLoaded, setContactsLoaded] = useState(false);
   const chatCache = useRef({ query: {}, chats: {} });
   const typingTimers = useRef({});
 
@@ -169,7 +174,7 @@ function ChatScreen(props) {
               }
             });
             socket.current.on("leaveChat", ([id, del]) => {
-              if (chatID.id == id) setChatID({ id: null, type: null });
+              if (chatIDRef.current.id == id) setChatID({ id: null, type: null });
               setMessages((prev) => {
                 const store = { ...prev };
                 const keys = Object.keys(store[id] || {});
@@ -314,6 +319,17 @@ function ChatScreen(props) {
                       return { ...prev, ...{ [user._id]: user } };
                     });
                     datagroup.type = "chats";
+                  } else if ((data.users || []).includes(userID.current) && !user.Chats.includes(data._id)) {
+                    // Covers chats we're already a member of but weren't yet reflected
+                    // in the cached local profile (e.g. a group we just created).
+                    user.Chats.push(data._id);
+                    await db
+                      .transaction("meta", "readwrite")
+                      .objectStore("meta")
+                      .put({ _id: "user", data: user });
+                    setProfiles((prev) => {
+                      return { ...prev, ...{ [user._id]: user } };
+                    });
                   }
                   dict[data._id] = data;
                   await db
@@ -331,10 +347,11 @@ function ChatScreen(props) {
                   ? dict
                   : { ...chatCache.current.chats, ...dict };
               setChatdata(chatCache.current[datagroup.type] || {});
-              if (type === "chats") setChatsLoaded(true);
+              if (type === "chats" || type === "upchats") setChatsLoaded(true);
             });
 
             socket.current.on("contacts", (data) => {
+              setContactsLoaded(true);
               setContacts(new Set(data));
               data.forEach((uid) => {
                 if (!profiles[uid]) socket.current.emit("getProfile", { uid });
@@ -408,6 +425,7 @@ function ChatScreen(props) {
         chatsLoaded,
         loadedChats,
         contacts,
+        contactsLoaded,
         setChatID,
         setMessages,
         messageDialog,

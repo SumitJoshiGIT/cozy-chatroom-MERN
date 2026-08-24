@@ -34,9 +34,12 @@ export default function (props) {
     setAbout(chat.about || "");
     setName(chat.name || "");
     setUsername(chat.username || '');
-    setActive(0)
+  }, [chat.about, chat.name, chat.username]);
+
+  useEffect(() => {
+    setActive(0);
     setReporting(false);
-  }, [chat]);
+  }, [chatID.id]);
   const isOwner = userID.current == chat.owner;
   const admin =
     (chat.admins || []).includes(userID.current) || isOwner;

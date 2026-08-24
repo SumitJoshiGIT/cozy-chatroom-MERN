@@ -3,9 +3,10 @@ import Entity from "./Entity";
 import { useCtx } from "../../AppScreen";
 import EntityTwo from "./EntityTwo";
 import { TextField } from "../../../ui/TextField";
+import Spinner from "../../../ui/Spinner";
 
 export default function (props){
-    const {contacts,profiles}=useCtx()
+    const {contacts,profiles,contactsLoaded}=useCtx()
     const ref=useRef();
     const [query,setQuery]=useState('');
     const onChange=(event)=>{
@@ -34,7 +35,9 @@ export default function (props){
      )}
      <TextField ref={ref} placeholder='Search people' className="w-full shrink-0" onChange={onChange}/>
      <div className="flex flex-col flex-1 min-h-0 overflow-y-auto mt-2">
-       {friends.length > 0 ? friends : (
+       {!contactsLoaded ? (
+         <div className="flex justify-center mt-6"><Spinner /></div>
+       ) : friends.length > 0 ? friends : (
          <div className="text-center text-sm text-gray-400 mt-6">
            {contacts.size === 0 ? "Message someone to add them here." : "No matches."}
          </div>
