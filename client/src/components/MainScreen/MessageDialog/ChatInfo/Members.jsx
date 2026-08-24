@@ -14,6 +14,7 @@ export default function Members(props) {
             key={data}
             members={members}
             admin={props.admin}
+            owner={props.owner}
             setMembers={setMembers}
             id={data}
             chat={props.chat}

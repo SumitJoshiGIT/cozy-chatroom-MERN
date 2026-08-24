@@ -26,6 +26,13 @@ const allowedDocTypes = {
 };
 const maxUploadSize = 2*1024*1024;
 
+const PERMISSION_DEFAULTS = { sendMessages: "everyone", editInfo: "admins", pinMessages: "admins" };
+
+async function resolvePermissions(chat) {
+  const perm = chat.permissions ? await models.PermissionsModel.findById(chat.permissions) : null;
+  return { ...PERMISSION_DEFAULTS, ...(perm ? perm.permission : {}) };
+}
+
 async function saveUpload(base64, mimeType, name, size, extraTypes) {
   const allowList = extraTypes ? { ...allowedTypes, ...extraTypes } : allowedTypes;
   if (!base64 || !allowList[mimeType]) return null;
@@ -64,6 +71,7 @@ async function onConnection(socket, io) {
             if (other && other.blocked.some((b) => b.toString() === profile._id.toString())) return;
           }
         }
+        if (parentChat && parentChat.type === "group" && !(await canPerform(parentChat, "sendMessages"))) return;
         console.log(message,"m")
         if (message.reply_to){
          if(!await models.MessagesModel.find({
@@ -185,7 +193,7 @@ async function onConnection(socket, io) {
 
     socket.on("pinMessage", async ({ id, cid }) => {
       const chat = await models.ChatsModel.findById(cid);
-      if (!chat || !chatSet.has(cid) || (chat.type === "group" && !isChatAdmin(chat))) return;
+      if (!chat || !chatSet.has(cid) || (chat.type === "group" && !(await canPerform(chat, "pinMessages")))) return;
       if (!chat.pinned.some((p) => p.toString() === id.toString())) {
         chat.pinned.push(id);
         await chat.save();
@@ -195,7 +203,7 @@ async function onConnection(socket, io) {
 
     socket.on("unpinMessage", async ({ id, cid }) => {
       const chat = await models.ChatsModel.findById(cid);
-      if (!chat || !chatSet.has(cid) || (chat.type === "group" && !isChatAdmin(chat))) return;
+      if (!chat || !chatSet.has(cid) || (chat.type === "group" && !(await canPerform(chat, "pinMessages")))) return;
       chat.pinned = chat.pinned.filter((p) => p.toString() !== id.toString());
       await chat.save();
       io.to(cid).emit("chat", { type: "chats", chats: [chat] });
@@ -386,10 +394,15 @@ async function onConnection(socket, io) {
     function isChatOwner(chat){
       return chat.owner && chat.owner.toString()===profile._id.toString();
     }
+    async function canPerform(chat, key){
+      if (isChatAdmin(chat)) return true;
+      const perm = await resolvePermissions(chat);
+      return perm[key] === "everyone";
+    }
 
     socket.on("updateChat", async (stream) =>{
       const chat=await models.ChatsModel.findById(stream.cid)
-      if(!chat || !chatSet.has(chat._id.toString()) || !isChatAdmin(chat)) return;
+      if(!chat || !chatSet.has(chat._id.toString()) || !(await canPerform(chat, "editInfo"))) return;
 
       if(stream.name) chat.name=xss(stream.name);
       if(stream.about) chat.about=xss(stream.about);
@@ -426,6 +439,30 @@ async function onConnection(socket, io) {
       await models.ChatsModel.findByIdAndUpdate(chatID,{$pull:{admins:targetId}});
       const updated=await models.ChatsModel.findById(chatID);
       io.to(chatID).emit("chat",{type:"chats",chats:[updated]});
+    });
+
+    socket.on("getPermissions", async ({ cid }) => {
+      const chat = await models.ChatsModel.findById(cid);
+      if (!chat || !chatSet.has(cid)) return;
+      socket.emit("permissions", { cid, permission: await resolvePermissions(chat) });
+    });
+
+    socket.on("updatePermissions", async ({ cid, permissions }) => {
+      const chat = await models.ChatsModel.findById(cid);
+      if (!chat || !chatSet.has(cid) || chat.type !== "group" || !isChatAdmin(chat)) return;
+      const update = {};
+      for (const key of Object.keys(PERMISSION_DEFAULTS)) {
+        if (permissions[key] === "everyone" || permissions[key] === "admins") update[key] = permissions[key];
+      }
+      const merged = { ...(await resolvePermissions(chat)), ...update };
+      if (chat.permissions) {
+        await models.PermissionsModel.findByIdAndUpdate(chat.permissions, { permission: merged });
+      } else {
+        const perm = await models.PermissionsModel.create({ permission: merged });
+        chat.permissions = perm._id;
+        await chat.save();
+      }
+      io.to(cid).emit("permissions", { cid, permission: merged });
     });
 
 

@@ -46,7 +46,11 @@ const Chats=new mongoose.Schema
     ref:'Messages',
     type:[mongoose.Schema.Types.ObjectId]
    },
-   permissions:mongoose.Schema.Types.ObjectId
+   permissions:{
+    default:null,
+    ref:'Permissions',
+    type:mongoose.Schema.Types.ObjectId
+   }
 },
    {timestamps:true}
 )

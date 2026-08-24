@@ -11,12 +11,12 @@ import { useToast } from "../../../ui/Toast.jsx";
 import { downloadFile } from "../../../../download";
 import Members from "./Members.jsx";
 import Media from './Media.jsx'
-import ComingSoon from "../../../ui/ComingSoon.jsx";
+import Permissions from "./Permissions.jsx";
 import close from '/close.svg'
 const Tabs={
   1:Members,
   0:Media,
-  2:() => <ComingSoon title="Permissions" body="Fine-grained member permissions are on the way." />,
+  2:Permissions,
 }
 export default function (props) {
   const { chatdata, privateChats,socket,setMessageDialog, chatID, profiles, userID, blocked, toggleBlock, report } = useCtx();
@@ -37,8 +37,9 @@ export default function (props) {
     setActive(0)
     setReporting(false);
   }, [chat]);
+  const isOwner = userID.current == chat.owner;
   const admin =
-    (chat.admins || []).includes(userID.current) || userID.current == chat.owner;
+    (chat.admins || []).includes(userID.current) || isOwner;
   const fileform = useRef({});
   const ActiveTab=Tabs[active];
 
@@ -162,7 +163,7 @@ export default function (props) {
               <button className={`flex-1 p-2 pb-2.5 transition-colors ${active===0?'text-purple-600 border-b-2 border-purple-400':'hover:text-gray-600'}`} onClick={()=>setActive(0)}>Media</button>
               {admin&&<button className={`flex-1 p-2 pb-2.5 transition-colors ${active===2?'text-purple-600 border-b-2 border-purple-400':'hover:text-gray-600'}`} onClick={()=>setActive(2)}>Permissions</button>}
             </div>
-       {chat&&ActiveTab&&<ActiveTab chat={chat} admin={admin}/>}
+       {chat&&ActiveTab&&<ActiveTab chat={chat} admin={admin} owner={isOwner}/>}
 
       </div>
     </Card>
