@@ -32,21 +32,20 @@ function ChatScreen(props) {
   const userID = useRef(null);
   const privateChats = useRef({});
   const scrollable = useRef(null);
-  const socket = useRef(
-    (() => {
-      captureAuthTokenFromUrl();
-      return io(apiOrigin, {
-        withCredentials: true,
-        transports: ["websocket"],
-        reconnection: true,
-        reconnectionAttempts: 4,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        timeout: 5000,
-        auth: (cb) => cb({ token: getStoredAuthToken() }),
-      });
-    })()
-  );
+  const socket = useRef(null);
+  if (socket.current === null) {
+    captureAuthTokenFromUrl();
+    socket.current = io(apiOrigin, {
+      withCredentials: true,
+      transports: ["websocket"],
+      reconnection: true,
+      reconnectionAttempts: 4,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 5000,
+      auth: (cb) => cb({ token: getStoredAuthToken() }),
+    });
+  }
 
   const [db, setDb] = useState(null);
   useEffect(() => {
