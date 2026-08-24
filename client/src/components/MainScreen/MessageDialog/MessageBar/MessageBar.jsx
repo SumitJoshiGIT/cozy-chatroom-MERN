@@ -138,7 +138,7 @@ const MessageBar = React.memo((props) => {
     setFiles([]);
 
     if (props.reply) props.setReply();
-    scrollable.current.scrollTo(0, scrollable.current.scrollHeight);
+    if (scrollable.current) scrollable.current.scrollTo(0, scrollable.current.scrollHeight);
   }
 
   function sendVoiceNote(attachment) {
@@ -162,7 +162,7 @@ const MessageBar = React.memo((props) => {
       obj[chatID.id] = { ...(obj[chatID.id] || {}), ...{ [msg._id]: msg } };
       return obj;
     });
-    scrollable.current.scrollTo(0, scrollable.current.scrollHeight);
+    if (scrollable.current) scrollable.current.scrollTo(0, scrollable.current.scrollHeight);
   }
 
   async function startRecording() {
