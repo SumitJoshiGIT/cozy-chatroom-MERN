@@ -37,6 +37,15 @@ const Messages=new mongoose.Schema
         },{_id:false})],
         default:[],
     },
+    location:{
+        type:new mongoose.Schema({
+            lat:Number,
+            lng:Number,
+            live:{type:Boolean, default:false},
+            expiresAt:Date,
+        },{_id:false}),
+        default:null,
+    },
     edited:{
         type:Boolean,
         default:false,

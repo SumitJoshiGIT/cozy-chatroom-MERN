@@ -101,20 +101,19 @@ function ChatScreen(props) {
           userID.current = user_id;
           console.log("Connected as:", user_id);
 
-          const m = await db
+          // Attach onsuccess synchronously, in the same tick as creating each
+          // request - an `await` in between (even on a non-promise IDBRequest,
+          // which just defers a tick) can let the request's real completion
+          // fire before the handler is attached, silently dropping it and
+          // leaving chatsLoaded stuck false forever.
+          const m = db
             .transaction("messages")
             .objectStore("messages")
             .getAll();
 
-          const c = await db.transaction("chats").objectStore("chats").getAll();
+          const c = db.transaction("chats").objectStore("chats").getAll();
 
           const p = db.transaction("profiles").objectStore("profiles").getAll();
-
-          const updates = db
-            .transaction("meta")
-            .objectStore("meta")
-            .get("updates");
-          await Promise.all([p, c]);
 
           m.onsuccess = async (event) => {
             const data = event.target.result;
@@ -278,6 +277,30 @@ function ChatScreen(props) {
                   }
                 });
                 if (!changed) return prev;
+                return { ...prev, [cid]: chatStore };
+              });
+            });
+
+            socket.current.on("locationUpdated", ({ cid, mid, lat, lng }) => {
+              setMessages((prev) => {
+                const chatStore = { ...(prev[cid] || {}) };
+                const msg = chatStore[mid];
+                if (!msg || !msg.location) return prev;
+                const updated = { ...msg, location: { ...msg.location, lat, lng } };
+                chatStore[mid] = updated;
+                db.transaction("messages", "readwrite").objectStore("messages").put(updated);
+                return { ...prev, [cid]: chatStore };
+              });
+            });
+
+            socket.current.on("locationStopped", ({ cid, mid }) => {
+              setMessages((prev) => {
+                const chatStore = { ...(prev[cid] || {}) };
+                const msg = chatStore[mid];
+                if (!msg || !msg.location) return prev;
+                const updated = { ...msg, location: { ...msg.location, live: false } };
+                chatStore[mid] = updated;
+                db.transaction("messages", "readwrite").objectStore("messages").put(updated);
                 return { ...prev, [cid]: chatStore };
               });
             });

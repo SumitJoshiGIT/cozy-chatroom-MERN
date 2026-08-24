@@ -31,6 +31,12 @@ const allowedAudioTypes = {
   "audio/mpeg":"mp3",
   "audio/wav":"wav",
 };
+const allowedVideoTypes = {
+  "video/mp4":"mp4",
+  "video/webm":"webm",
+  "video/ogg":"ogv",
+  "video/quicktime":"mov",
+};
 const maxUploadSize = 2*1024*1024;
 
 const PERMISSION_DEFAULTS = { sendMessages: "everyone", editInfo: "admins", pinMessages: "admins" };
@@ -90,7 +96,7 @@ async function onConnection(socket, io) {
         const attachments = [];
         if (Array.isArray(message.attachments)) {
           for (const attachment of message.attachments.slice(0, 10)) {
-            const saved = await saveUpload(attachment.file, attachment.type, attachment.name, attachment.size, { ...allowedDocTypes, ...allowedAudioTypes });
+            const saved = await saveUpload(attachment.file, attachment.type, attachment.name, attachment.size, { ...allowedDocTypes, ...allowedAudioTypes, ...allowedVideoTypes });
             if (saved) attachments.push(saved);
           }
         }
@@ -134,6 +140,89 @@ async function onConnection(socket, io) {
     })
 
     socket.on("sendMessage", SendMessage);
+
+    socket.on("sendLocation", async (stream, ack) => {
+      try {
+        if (!chatSet.has(stream.cid)) return;
+        const lat = Number(stream.lat);
+        const lng = Number(stream.lng);
+        if (!isFinite(lat) || !isFinite(lng)) return;
+        const parentChat = await models.ChatsModel.findById(stream.cid);
+        if (!parentChat) return;
+        if (parentChat.type === "private") {
+          const otherId = (parentChat.users || []).find((u) => u.toString() !== profile._id.toString());
+          if (otherId) {
+            const other = await models.UsersModel.findById(otherId, "blocked");
+            if (other && other.blocked.some((b) => b.toString() === profile._id.toString())) return;
+          }
+        }
+        if (parentChat.type === "group" && !(await canPerform(parentChat, "sendMessages"))) return;
+        const live = !!stream.live;
+        const durationMs = Math.min(Math.max(Number(stream.durationMs) || 0, 0), 8 * 60 * 60 * 1000);
+        const newMessage = new models.MessagesModel({
+          chat: stream.cid,
+          content: "",
+          type: "location",
+          uid: profile._id,
+          status: "✔",
+          location: {
+            lat,
+            lng,
+            live,
+            expiresAt: live ? new Date(Date.now() + (durationMs || 15 * 60 * 1000)) : null,
+          },
+        });
+        await newMessage.save();
+        io.to(stream.cid).emit("messages", {
+          id: stream.cid,
+          replace: stream.replace,
+          data: [newMessage],
+        });
+        if (typeof ack === "function") ack({ _id: newMessage._id.toString() });
+      } catch (err) {
+        console.log(err);
+      }
+    });
+
+    socket.on("updateLocation", async (stream) => {
+      try {
+        const lat = Number(stream.lat);
+        const lng = Number(stream.lng);
+        if (!isFinite(lat) || !isFinite(lng)) return;
+        const message = await models.MessagesModel.findById(stream.id);
+        if (!message || !message.location || !message.location.live) return;
+        if (message.uid.toString() !== profile._id.toString()) return;
+        if (!chatSet.has(message.chat.toString())) return;
+        if (message.location.expiresAt && message.location.expiresAt.getTime() < Date.now()) return;
+        message.location.lat = lat;
+        message.location.lng = lng;
+        await message.save();
+        io.to(message.chat.toString()).emit("locationUpdated", {
+          cid: message.chat.toString(),
+          mid: message.mid,
+          lat,
+          lng,
+        });
+      } catch (err) {
+        console.log(err);
+      }
+    });
+
+    socket.on("stopLiveLocation", async (stream) => {
+      try {
+        const message = await models.MessagesModel.findById(stream.id);
+        if (!message || !message.location || !message.location.live) return;
+        if (message.uid.toString() !== profile._id.toString()) return;
+        message.location.live = false;
+        await message.save();
+        io.to(message.chat.toString()).emit("locationStopped", {
+          cid: message.chat.toString(),
+          mid: message.mid,
+        });
+      } catch (err) {
+        console.log(err);
+      }
+    });
 
     socket.on("search", async (stream) => {
       try {

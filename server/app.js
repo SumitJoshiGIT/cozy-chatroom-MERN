@@ -26,7 +26,10 @@ if (!process.env.SESSION_SECRET) {
 const app = express();
 if (isProduction) app.set('trust proxy', 1);
 const server = createServer(app);
-const io = new Server(server, { cors: { origin: clientOrigin, credentials: true } });
+// Attachments are sent base64-encoded over the socket (up to the client's 2MB
+// raw-file cap), which inflates to ~2.7MB plus JSON overhead — comfortably
+// over socket.io's 1MB default, so raise it or uploads near the cap silently fail.
+const io = new Server(server, { cors: { origin: clientOrigin, credentials: true }, maxHttpBufferSize: 5 * 1024 * 1024 });
 
 const sessionMiddleware = session({
   secret: process.env.SESSION_SECRET || 'dev-only-insecure-secret',

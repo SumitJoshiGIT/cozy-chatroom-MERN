@@ -14,6 +14,7 @@ import { downloadFile } from "../../../../download";
 import { useToast } from "../../../ui/Toast";
 import Spinner from "../../../ui/Spinner";
 import VoiceNote from "./VoiceNote";
+import LocationMessage from "./LocationMessage";
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const formatSize = (bytes) => {
   if (!bytes) return "";
@@ -194,6 +195,16 @@ export default function (props) {
               </div>
             ) : null}
 
+            {messageItem.location && (
+              <div className="mb-1">
+                <LocationMessage
+                  location={messageItem.location}
+                  flag={flag}
+                  onStop={() => socket.current.emit("stopLiveLocation", { id: messageItem._id })}
+                />
+              </div>
+            )}
+
             {messageItem.attachments && messageItem.attachments.length > 0 && (
               <div className="flex flex-wrap gap-1 mb-1">
                 {messageItem.attachments.map((a, idx) =>
@@ -201,6 +212,8 @@ export default function (props) {
                     <a key={idx} href={`${apiOrigin}/${a.src}`} target="_blank" rel="noreferrer">
                       <img src={`${apiOrigin}/${a.src}`} alt={a.name} className="max-h-40 max-w-52 rounded-lg object-cover" />
                     </a>
+                  ) : (a.contentType || "").startsWith("video/") ? (
+                    <video key={idx} src={`${apiOrigin}/${a.src}`} controls className="max-h-40 max-w-52 rounded-lg" />
                   ) : (a.contentType || "").startsWith("audio/") ? (
                     <VoiceNote key={idx} src={`${apiOrigin}/${a.src}`} />
                   ) : (
@@ -223,11 +236,8 @@ export default function (props) {
               </div>
             )}
 
-            {messageItem.content && (
-              <div className="flex items-end gap-2 flex-wrap">
-                <span className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap break-words flex-1 min-w-0">
-                  {messageItem.content}
-                </span>
+            {(() => {
+              const footer = (
                 <span className="shrink-0 flex items-center gap-0.5 text-[0.65rem] text-gray-400 ml-auto -mb-0.5">
                   {isPinned && <span title="Pinned">📌</span>}
                   {isStarred && <span className="text-amber-500">★</span>}
@@ -239,8 +249,22 @@ export default function (props) {
                     <span className={messageItem.status === "✔✔" ? "text-purple-500" : ""}>{messageItem.status}</span>
                   ))}
                 </span>
-              </div>
-            )}
+              );
+              if (messageItem.content) {
+                return (
+                  <div className="flex items-end gap-2 flex-wrap">
+                    <span className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap break-words flex-1 min-w-0">
+                      {messageItem.content}
+                    </span>
+                    {footer}
+                  </div>
+                );
+              }
+              if ((messageItem.attachments && messageItem.attachments.length > 0) || messageItem.location) {
+                return <div className="flex justify-end">{footer}</div>;
+              }
+              return null;
+            })()}
 
             {messageItem.reactions && messageItem.reactions.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1">

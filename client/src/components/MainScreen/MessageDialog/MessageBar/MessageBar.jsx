@@ -3,14 +3,18 @@ import { useState, useRef, useEffect } from "react";
 import { useCtx } from "../../AppScreen";
 import IconButton from "../../../ui/IconButton";
 import { useToast } from "../../../ui/Toast";
-import attachment from "/attachment.svg";
 import send from "/send.svg";
 import reply from "/reply.svg";
 import edit from "/edit.svg";
 import close from "/close.svg";
 import fileIcon from "/files.svg";
+import EmojiPicker from "./EmojiPicker";
+import LocationPicker from "./LocationPicker";
+import AttachMenu from "./AttachMenu";
 const maxSize = 2*1024*1024;
 const imageTypes = ['image/jpeg','image/png','image/jpg','image/webp','image/svg','image/svg+xml'];
+const videoTypes = ['video/mp4','video/webm','video/ogg','video/quicktime'];
+const audioTypes = ['audio/mpeg','audio/mp4','audio/wav','audio/webm','audio/ogg'];
 const docTypes = [
   'application/pdf','application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -20,7 +24,7 @@ const docTypes = [
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'text/plain','text/csv','application/zip',
 ];
-const acceptedTypes = [...imageTypes, ...docTypes];
+const acceptedTypes = [...imageTypes, ...videoTypes, ...audioTypes, ...docTypes];
 const MessageBar = React.memo((props) => {
   const { setMessages, db, scrollable, profiles, userID, chatID, socket, emitTyping, chatdata, blocked, toggleBlock }=useCtx();
   const toast=useToast();
@@ -43,6 +47,49 @@ const MessageBar = React.memo((props) => {
   const recordingIntervalRef = useRef(null);
   const recordingStreamRef = useRef(null);
   const maxRecordingSeconds = 180;
+  const liveLocationRef = useRef(null); // { messageId, watchId, cid }
+  const [liveLocationChat, setLiveLocationChat] = useState(null);
+
+  useEffect(() => {
+    return () => {
+      if (liveLocationRef.current) {
+        navigator.geolocation.clearWatch(liveLocationRef.current.watchId);
+        liveLocationRef.current = null;
+      }
+    };
+  }, []);
+
+  function clearLiveLocation() {
+    if (liveLocationRef.current) navigator.geolocation.clearWatch(liveLocationRef.current.watchId);
+    liveLocationRef.current = null;
+    setLiveLocationChat(null);
+  }
+
+  function sendLocation({ lat, lng, live, durationMs }) {
+    socket.current.emit("sendLocation", { cid: chatID.id, lat, lng, live, durationMs }, (res) => {
+      if (!res || !res._id || !live) return;
+      clearLiveLocation();
+      const cid = chatID.id;
+      const watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          socket.current.emit("updateLocation", {
+            id: res._id,
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          });
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 5000 }
+      );
+      liveLocationRef.current = { messageId: res._id, watchId, cid };
+      setLiveLocationChat(cid);
+      setTimeout(() => {
+        if (liveLocationRef.current && liveLocationRef.current.messageId === res._id) clearLiveLocation();
+      }, durationMs || 15 * 60 * 1000);
+    });
+  }
+
+  const sharingLiveLocation = liveLocationChat === chatID.id;
 
   useEffect(() => {
     if (props.edit) setMessage(props.edit[0].content || "");
@@ -162,7 +209,7 @@ const MessageBar = React.memo((props) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const data = reader.result.split(',')[1];
-        sendVoiceNote({ file: data, name: 'voice-message', type: recorder.mimeType, size: blob.size });
+        sendVoiceNote({ file: data, name: 'voice-message', type: recorder.mimeType, contentType: recorder.mimeType, size: blob.size });
       };
       reader.readAsDataURL(blob);
     };
@@ -231,7 +278,7 @@ const MessageBar = React.memo((props) => {
               const reader = new FileReader();
               reader.onloadend = () => {
                 const data = reader.result.split(',')[1];
-                setFiles((prev) => [...prev, { file: data, name: file.name, type: file.type, size: file.size }]);
+                setFiles((prev) => [...prev, { file: data, name: file.name, type: file.type, contentType: file.type, size: file.size }]);
               };
               reader.readAsDataURL(file);
            });
@@ -239,6 +286,20 @@ const MessageBar = React.memo((props) => {
           }
   function removeFile(idx) {
     setFiles((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function insertEmoji(emoji) {
+    const textarea = ref.current;
+    const start = textarea ? textarea.selectionStart : message.length;
+    const end = textarea ? textarea.selectionEnd : message.length;
+    const next = message.slice(0, start) + emoji + message.slice(end);
+    setMessage(next);
+    requestAnimationFrame(() => {
+      if (!textarea) return;
+      textarea.focus();
+      const cursor = start + emoji.length;
+      textarea.setSelectionRange(cursor, cursor);
+    });
   }
 
 
@@ -251,6 +312,8 @@ const MessageBar = React.memo((props) => {
             <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden shadow-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
               {file.type.startsWith('image/') ? (
                 <img src={`data:${file.type};base64,${file.file}`} alt={file.name} className="w-full h-full object-cover" />
+              ) : file.type.startsWith('video/') ? (
+                <video src={`data:${file.type};base64,${file.file}`} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
                   <img src={fileIcon} className="w-6 h-6 opacity-60 dark:invert" alt="" />
@@ -307,12 +370,19 @@ const MessageBar = React.memo((props) => {
           <input
             ref={filesRef}
             type="file"
-            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip"
+            accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip"
             onChange={handleChange}
             multiple
             className="hidden"
           />
-          <IconButton icon={attachment} alt="Attach file" size="lg" onClick={() => filesRef.current.click()} />
+          <AttachMenu
+            onPick={(accept) => {
+              filesRef.current.accept = accept;
+              filesRef.current.click();
+            }}
+          />
+          <EmojiPicker onPick={insertEmoji} />
+          <LocationPicker onSend={sendLocation} sharing={sharingLiveLocation} />
           <textarea
             rows="1"
             onKeyDown={(event) => {

@@ -78,8 +78,17 @@ export default function (props) {
 
   const active = chatID.id === chat._id;
   const pad = (n) => n.toString().padStart(2, "0");
+  const attachmentPreviewLabel = (attachment) => {
+    const type = (attachment.contentType || attachment.type || "");
+    if (type.startsWith("image/")) return "📷 Photo";
+    if (type.startsWith("video/")) return "🎥 Video";
+    if (type.startsWith("audio/")) return "🎤 Voice message";
+    return `📎 ${attachment.name || "File"}`;
+  };
   const previewText = latest
-    ? (latest.content || (latest.attachments && latest.attachments.length ? "📷 Photo" : ""))
+    ? (latest.content
+        || (latest.attachments && latest.attachments.length ? attachmentPreviewLabel(latest.attachments[0]) : "")
+        || (latest.location ? (latest.location.live ? "📍 Live location" : "📍 Location") : ""))
     : "";
   const previewName = latest
     ? (latest.uid == userID.current ? "You" : (profiles[latest.uid] ? profiles[latest.uid].name : ""))
