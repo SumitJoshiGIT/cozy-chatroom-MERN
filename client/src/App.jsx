@@ -5,6 +5,7 @@ import SignUp from './components/AuthScreen/SignUp/SignUp';
 import SignIn from './components/AuthScreen/SignIn/SignIn';
 import Verify from './components/AuthScreen/Verify/Verify';
 import Hero from './components/Hero/Hero';
+import Features from './components/Hero/Features';
 import { ToastProvider } from './components/ui/Toast';
 
 const router=createBrowserRouter([
@@ -28,6 +29,10 @@ const router=createBrowserRouter([
     {
       path:"/",
       element:<Hero/>
+    },
+    {
+      path:"/features",
+      element:<Features/>
     },
 
   ]

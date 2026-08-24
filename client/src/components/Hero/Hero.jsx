@@ -38,6 +38,14 @@ export default function Hero() {
             </Button>
           </div>
 
+          <Link
+            to="/features"
+            className="text-sm text-purple-950/60 hover:text-purple-950 underline underline-offset-4 decoration-purple-950/30 mt-5 animate-fade-in-up"
+            style={{ animationDelay: '280ms', animationFillMode: 'backwards' }}
+          >
+            See everything inside →
+          </Link>
+
           <dl className="flex gap-6 mt-14 text-sm text-purple-950/60 animate-fade-in-up" style={{ animationDelay: '320ms', animationFillMode: 'backwards' }}>
             <div>
               <dt className="font-semibold text-purple-950">Groups</dt>

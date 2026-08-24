@@ -57,7 +57,7 @@ export default function LocationMessage({ location, flag, onStop }) {
   const mapsUrl = `https://www.google.com/maps?q=${location.lat},${location.lng}`;
 
   return (
-    <div className="w-56 rounded-lg overflow-hidden shadow-sm border border-black/5 dark:border-white/10">
+    <div className="w-56 rounded-2xl overflow-hidden shadow-sm border border-black/5 dark:border-white/10">
       <a href={mapsUrl} target="_blank" rel="noreferrer" title="Open in Maps" className="block">
         <div ref={containerRef} className="w-56 h-36" />
       </a>

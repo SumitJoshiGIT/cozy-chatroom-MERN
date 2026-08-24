@@ -9,7 +9,6 @@ import reply from "/reply.svg";
 import copy from "/copy.svg";
 import del from "/delete.svg";
 import edit from "/edit.svg";
-import fileIcon from "/files.svg";
 import { downloadFile } from "../../../../download";
 import { useToast } from "../../../ui/Toast";
 import Spinner from "../../../ui/Spinner";
@@ -22,6 +21,23 @@ const formatSize = (bytes) => {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
+const FILE_BADGES = {
+  "application/pdf": { label: "PDF", className: "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300" },
+  "application/msword": { label: "DOC", className: "bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300" },
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { label: "DOC", className: "bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300" },
+  "application/vnd.ms-excel": { label: "XLS", className: "bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300" },
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { label: "XLS", className: "bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300" },
+  "application/vnd.ms-powerpoint": { label: "PPT", className: "bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-300" },
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": { label: "PPT", className: "bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-300" },
+  "text/plain": { label: "TXT", className: "bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-200" },
+  "text/csv": { label: "CSV", className: "bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300" },
+  "application/zip": { label: "ZIP", className: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300" },
+};
+const fileBadge = (contentType, name) =>
+  FILE_BADGES[contentType] || {
+    label: (name || "").split(".").pop()?.slice(0, 3).toUpperCase() || "FILE",
+    className: "bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-200",
+  };
 
 export default function (props) {
   const { profiles, db, userID, Messages, chatID, socket, starred, toggleStar, chatdata, pinMessage, unpinMessage, reactMessage, report } = useCtx();
@@ -210,10 +226,10 @@ export default function (props) {
                 {messageItem.attachments.map((a, idx) =>
                   (a.contentType || "").startsWith("image/") ? (
                     <a key={idx} href={`${apiOrigin}/${a.src}`} target="_blank" rel="noreferrer">
-                      <img src={`${apiOrigin}/${a.src}`} alt={a.name} className="max-h-40 max-w-52 rounded-lg object-cover" />
+                      <img src={`${apiOrigin}/${a.src}`} alt={a.name} className="max-h-40 max-w-52 rounded-2xl object-cover" />
                     </a>
                   ) : (a.contentType || "").startsWith("video/") ? (
-                    <video key={idx} src={`${apiOrigin}/${a.src}`} controls className="max-h-40 max-w-52 rounded-lg" />
+                    <video key={idx} src={`${apiOrigin}/${a.src}`} controls className="max-h-40 max-w-52 rounded-2xl" />
                   ) : (a.contentType || "").startsWith("audio/") ? (
                     <VoiceNote key={idx} src={`${apiOrigin}/${a.src}`} />
                   ) : (
@@ -223,9 +239,16 @@ export default function (props) {
                       onClick={() =>
                         downloadFile(`${apiOrigin}/${a.src}`, a.name).catch(() => toast.error("Couldn't download file"))
                       }
-                      className="flex items-center gap-2 max-w-52 px-2 py-1.5 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-colors text-left"
+                      className="flex items-center gap-2.5 w-52 px-2.5 py-2 rounded-2xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-colors text-left"
                     >
-                      <img src={fileIcon} className="w-6 h-6 shrink-0 opacity-70 dark:invert" alt="" />
+                      {(() => {
+                        const badge = fileBadge(a.contentType, a.name);
+                        return (
+                          <span className={`w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-[0.6rem] font-bold tracking-tight ${badge.className}`}>
+                            {badge.label}
+                          </span>
+                        );
+                      })()}
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium">{a.name}</span>
                         <span className="block text-xs text-gray-500 dark:text-gray-400">{formatSize(a.size)}</span>
