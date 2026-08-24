@@ -33,6 +33,8 @@ function ChatScreen(props) {
   const [loadedChats, setLoadedChats] = useState(new Set());
   const [contactsLoaded, setContactsLoaded] = useState(false);
   const chatCache = useRef({ query: {}, chats: {} });
+  const chatsReadyRef = useRef(false);
+  const contactsReadyRef = useRef(false);
   const typingTimers = useRef({});
 
   const navigate = useNavigate();
@@ -388,10 +390,14 @@ function ChatScreen(props) {
                   ? dict
                   : { ...chatCache.current.chats, ...dict };
               setChatdata(chatCache.current[datagroup.type] || {});
-              if (type === "chats" || type === "upchats") setChatsLoaded(true);
+              if (type === "chats" || type === "upchats") {
+                chatsReadyRef.current = true;
+                setChatsLoaded(true);
+              }
             });
 
             socket.current.on("contacts", (data) => {
+              contactsReadyRef.current = true;
               setContactsLoaded(true);
               setContacts(new Set(data));
               data.forEach((uid) => {
@@ -399,8 +405,17 @@ function ChatScreen(props) {
               });
             });
 
-            socket.current.emit("chats", { type: "upchats" });
-            socket.current.emit("contacts", {});
+            // The server resolves the socket's profile asynchronously before
+            // registering its own listeners, so a request that arrives in that
+            // window is silently dropped with no error on either side - retry
+            // a few times with backoff rather than leaving the UI stuck loading.
+            const emitUntilAcked = (event, payload, readyRef, attempt = 0) => {
+              if (readyRef.current || attempt > 5) return;
+              socket.current.emit(event, payload);
+              setTimeout(() => emitUntilAcked(event, payload, readyRef, attempt + 1), 1000 * Math.pow(1.5, attempt));
+            };
+            emitUntilAcked("chats", { type: "upchats" }, chatsReadyRef);
+            emitUntilAcked("contacts", {}, contactsReadyRef);
             setChatdata(chatCache.current["chats"] || {});
           };
 
