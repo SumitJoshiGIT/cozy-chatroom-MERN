@@ -13,6 +13,7 @@ import fileIcon from "/files.svg";
 import { downloadFile } from "../../../../download";
 import { useToast } from "../../../ui/Toast";
 import Spinner from "../../../ui/Spinner";
+import VoiceNote from "./VoiceNote";
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const formatSize = (bytes) => {
   if (!bytes) return "";
@@ -200,6 +201,8 @@ export default function (props) {
                     <a key={idx} href={`${apiOrigin}/${a.src}`} target="_blank" rel="noreferrer">
                       <img src={`${apiOrigin}/${a.src}`} alt={a.name} className="max-h-40 max-w-52 rounded-lg object-cover" />
                     </a>
+                  ) : (a.contentType || "").startsWith("audio/") ? (
+                    <VoiceNote key={idx} src={`${apiOrigin}/${a.src}`} />
                   ) : (
                     <button
                       key={idx}

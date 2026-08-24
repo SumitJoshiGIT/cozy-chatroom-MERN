@@ -36,6 +36,13 @@ const MessageBar = React.memo((props) => {
   }, [profiles]);
   const filesRef = useRef(null);
   const [files, setFiles] = useState([]);
+  const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
+  const recordingIntervalRef = useRef(null);
+  const recordingStreamRef = useRef(null);
+  const maxRecordingSeconds = 180;
 
   useEffect(() => {
     if (props.edit) setMessage(props.edit[0].content || "");
@@ -86,6 +93,89 @@ const MessageBar = React.memo((props) => {
     if (props.reply) props.setReply();
     scrollable.current.scrollTo(0, scrollable.current.scrollHeight);
   }
+
+  function sendVoiceNote(attachment) {
+    const id = new Date().toUTCString();
+    const msg = {
+      _id: id,
+      uid: userID.current,
+      content: "",
+      mid: id,
+      chat: chatID.id,
+      time: new Date(),
+      reply_to: null,
+      updatedAt: new Date(),
+      status: "⧖",
+      attachments: [attachment],
+    };
+    if (db)
+      db.transaction("messages", "readwrite").objectStore("messages").put(msg);
+    setMessages((prev) => {
+      const obj = { ...prev };
+      obj[chatID.id] = { ...(obj[chatID.id] || {}), ...{ [msg._id]: msg } };
+      return obj;
+    });
+    scrollable.current.scrollTo(0, scrollable.current.scrollHeight);
+  }
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+      recordedChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        recordingStreamRef.current.getTracks().forEach((t) => t.stop());
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+      setRecordingSeconds(0);
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingSeconds((s) => {
+          if (s + 1 >= maxRecordingSeconds) stopRecording(false);
+          return s + 1;
+        });
+      }, 1000);
+    } catch (err) {
+      toast.error("Couldn't access microphone");
+    }
+  }
+
+  function stopRecording(cancel) {
+    clearInterval(recordingIntervalRef.current);
+    setRecording(false);
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+    if (cancel) {
+      recorder.onstop = () => recordingStreamRef.current.getTracks().forEach((t) => t.stop());
+      recorder.stop();
+      return;
+    }
+    recorder.onstop = () => {
+      recordingStreamRef.current.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType });
+      if (blob.size === 0) return;
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const data = reader.result.split(',')[1];
+        sendVoiceNote({ file: data, name: 'voice-message', type: recorder.mimeType, size: blob.size });
+      };
+      reader.readAsDataURL(blob);
+    };
+    recorder.stop();
+  }
+
+  useEffect(() => {
+    return () => {
+      clearInterval(recordingIntervalRef.current);
+      if (recordingStreamRef.current) recordingStreamRef.current.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
   useEffect(() => {
     if (ref.current) ref.current.style.height = "auto";
   }, [message]);
@@ -188,6 +278,31 @@ const MessageBar = React.memo((props) => {
           >Unblock</button>
         </div>
       ) : user &&(chatID.type=='user'||user.Chats.includes(chatID.id))? (
+        recording ? (
+        <div className="p-1.5 rounded-3xl shadow-md bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 w-full flex items-center gap-2 px-4 py-2.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+          <span className="text-sm text-gray-600 dark:text-gray-300 tabular-nums">
+            {Math.floor(recordingSeconds / 60)}:{(recordingSeconds % 60).toString().padStart(2, '0')}
+          </span>
+          <span className="flex-1" />
+          <button
+            type="button"
+            onClick={() => stopRecording(true)}
+            aria-label="Cancel recording"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:bg-black/5 dark:hover:bg-white/10"
+          >
+            <img src={close} className="w-4 h-4 dark:invert dark:opacity-80" alt="" />
+          </button>
+          <button
+            type="button"
+            onClick={() => stopRecording(false)}
+            aria-label="Send voice message"
+            className="w-9 h-9 rounded-full bg-[var(--accent)] text-white flex items-center justify-center active:scale-95 transition-transform"
+          >
+            <svg width="14" height="14" viewBox="0 0 12 12" fill="currentColor"><rect width="3" height="12" /><rect x="7" width="3" height="12" /></svg>
+          </button>
+        </div>
+        ) : (
         <div className="p-1.5 rounded-3xl shadow-md bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 w-full flex items-end gap-1">
           <input
             ref={filesRef}
@@ -228,14 +343,29 @@ const MessageBar = React.memo((props) => {
             }}
             value={message}
           ></textarea>
-          <IconButton
-            icon={send}
-            alt="Send"
-            size="lg"
-            onClick={SendMessage}
-            disabled={!canSend}
-          />
+          {canSend ? (
+            <IconButton
+              icon={send}
+              alt="Send"
+              size="lg"
+              onClick={SendMessage}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={startRecording}
+              aria-label="Record voice message"
+              className="rounded-full p-1.5 h-fit text-gray-500 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 transition-all"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="2" width="6" height="12" rx="3" />
+                <path d="M5 10a7 7 0 0 0 14 0" />
+                <line x1="12" y1="19" x2="12" y2="22" />
+              </svg>
+            </button>
+          )}
         </div>
+        )
       ) : null}
     </div>
   );

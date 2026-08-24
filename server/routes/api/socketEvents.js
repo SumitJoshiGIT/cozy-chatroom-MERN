@@ -24,6 +24,13 @@ const allowedDocTypes = {
   "text/csv":"csv",
   "application/zip":"zip",
 };
+const allowedAudioTypes = {
+  "audio/webm":"webm",
+  "audio/ogg":"ogg",
+  "audio/mp4":"m4a",
+  "audio/mpeg":"mp3",
+  "audio/wav":"wav",
+};
 const maxUploadSize = 2*1024*1024;
 
 const PERMISSION_DEFAULTS = { sendMessages: "everyone", editInfo: "admins", pinMessages: "admins" };
@@ -35,13 +42,14 @@ async function resolvePermissions(chat) {
 
 async function saveUpload(base64, mimeType, name, size, extraTypes) {
   const allowList = extraTypes ? { ...allowedTypes, ...extraTypes } : allowedTypes;
-  if (!base64 || !allowList[mimeType]) return null;
+  const normalizedType = (mimeType || '').split(';')[0].trim();
+  if (!base64 || !allowList[normalizedType]) return null;
   const buffer = Buffer.from(base64, 'base64');
   if (buffer.length > maxUploadSize) return null;
-  const ext = allowList[mimeType];
+  const ext = allowList[normalizedType];
   const src = `${Date.now()}-${Math.round(Math.random()*1e9)}.${ext}`;
   await fs.promises.writeFile(path.join(process.cwd(), "public", src), buffer);
-  return { src, name, size, contentType: mimeType };
+  return { src, name, size, contentType: normalizedType };
 }
 async function onConnection(socket, io) {
   let profile = null;
@@ -82,7 +90,7 @@ async function onConnection(socket, io) {
         const attachments = [];
         if (Array.isArray(message.attachments)) {
           for (const attachment of message.attachments.slice(0, 10)) {
-            const saved = await saveUpload(attachment.file, attachment.type, attachment.name, attachment.size, allowedDocTypes);
+            const saved = await saveUpload(attachment.file, attachment.type, attachment.name, attachment.size, { ...allowedDocTypes, ...allowedAudioTypes });
             if (saved) attachments.push(saved);
           }
         }
