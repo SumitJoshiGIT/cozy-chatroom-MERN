@@ -311,6 +311,21 @@ async function onConnection(socket, io) {
       socket.emit("leaveChat", [id, del]);
     });
     socket.on("muteChat", (id) => {});
+
+    socket.on("markSeen", async ({ cid }) => {
+      if (!cid || !chatSet.has(cid)) return;
+      try {
+        const result = await models.MessagesModel.updateMany(
+          { chat: cid, uid: { $ne: profile._id }, status: { $ne: "✔✔" } },
+          { $set: { status: "✔✔" } }
+        );
+        if (result.modifiedCount > 0) {
+          io.to(cid).emit("messagesSeen", { cid, uid: profile._id.toString() });
+        }
+      } catch (err) {
+        console.log(err);
+      }
+    });
     socket.on("chats", async (stream) => {
       const data = await models.ChatsModel.find({ _id: { $in: [...chatSet] } });
       socket.emit("chat", {

@@ -264,6 +264,24 @@ function ChatScreen(props) {
               }, 3000);
             });
 
+            socket.current.on("messagesSeen", ({ cid }) => {
+              setMessages((prev) => {
+                const chatStore = { ...(prev[cid] || {}) };
+                let changed = false;
+                Object.keys(chatStore).forEach((mid) => {
+                  const msg = chatStore[mid];
+                  if (msg.uid == userID.current && msg.status !== "✔✔") {
+                    const updated = { ...msg, status: "✔✔" };
+                    chatStore[mid] = updated;
+                    db.transaction("messages", "readwrite").objectStore("messages").put(updated);
+                    changed = true;
+                  }
+                });
+                if (!changed) return prev;
+                return { ...prev, [cid]: chatStore };
+              });
+            });
+
             socket.current.on("reactMessage", ({ mid, cid, reactions }) => {
               setMessages((prev) => {
                 const store = { ...(prev || {}) };

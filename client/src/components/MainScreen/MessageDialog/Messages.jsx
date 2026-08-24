@@ -35,6 +35,10 @@ export default function MessageDialog(props) {
   );
 
   const m = Messages[chatID.id];
+  useEffect(() => {
+    if (chatID.id) socket.current.emit("markSeen", { cid: chatID.id });
+  }, [chatID.id, m]);
+
   const messagesLoading = !!chatID.id && !loadedChats.has(chatID.id);
   const chat = chatdata[chatID.id] || {};
   const canPin = chat.type !== 'group' || (chat.admins||[]).includes(userID.current) || chat.owner===userID.current;
