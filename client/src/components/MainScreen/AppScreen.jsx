@@ -340,45 +340,55 @@ function ChatScreen(props) {
             
             socket.current.on("chat", async (datagroup) => {
               let dict = {};
+              if (!Array.isArray(user.Chats)) user.Chats = [];
               await Promise.all(
                 datagroup.chats.map(async (data) => {
-                  if (data.img) data.img.src = `${apiOrigin}/${data.img.src}`;
-                  if (data.type == "private") {
-                    data.users.forEach((uid) => {
-                      if (uid != userID.current) {
-                        privateChats.current[uid] = data._id;
-                        data.sender = uid;
-                        if (!profiles[uid])
-                          socket.current.emit("getProfile", { uid: uid });
-                      }
-                    });
-                  } else if (datagroup.type == "join") {
-                    user.Chats.push(data._id);
+                  try {
+                    if (data.img) data.img.src = `${apiOrigin}/${data.img.src}`;
+                    if (data.type == "private") {
+                      data.users.forEach((uid) => {
+                        if (uid != userID.current) {
+                          privateChats.current[uid] = data._id;
+                          data.sender = uid;
+                          if (!profiles[uid])
+                            socket.current.emit("getProfile", { uid: uid });
+                        }
+                      });
+                    } else if (datagroup.type == "join") {
+                      user.Chats.push(data._id);
+                      await db
+                        .transaction("meta", "readwrite")
+                        .objectStore("meta")
+                        .put({ _id: "user", data: user });
+                      setProfiles((prev) => {
+                        return { ...prev, ...{ [user._id]: user } };
+                      });
+                      datagroup.type = "chats";
+                    } else if ((data.users || []).includes(userID.current) && !user.Chats.includes(data._id)) {
+                      // Covers chats we're already a member of but weren't yet reflected
+                      // in the cached local profile (e.g. a group we just created).
+                      user.Chats.push(data._id);
+                      await db
+                        .transaction("meta", "readwrite")
+                        .objectStore("meta")
+                        .put({ _id: "user", data: user });
+                      setProfiles((prev) => {
+                        return { ...prev, ...{ [user._id]: user } };
+                      });
+                    }
+                    dict[data._id] = data;
                     await db
-                      .transaction("meta", "readwrite")
-                      .objectStore("meta")
-                      .put({ _id: "user", data: user });
-                    setProfiles((prev) => {
-                      return { ...prev, ...{ [user._id]: user } };
-                    });
-                    datagroup.type = "chats";
-                  } else if ((data.users || []).includes(userID.current) && !user.Chats.includes(data._id)) {
-                    // Covers chats we're already a member of but weren't yet reflected
-                    // in the cached local profile (e.g. a group we just created).
-                    user.Chats.push(data._id);
-                    await db
-                      .transaction("meta", "readwrite")
-                      .objectStore("meta")
-                      .put({ _id: "user", data: user });
-                    setProfiles((prev) => {
-                      return { ...prev, ...{ [user._id]: user } };
-                    });
+                      .transaction("chats", "readwrite")
+                      .objectStore("chats")
+                      .put(data);
+                  } catch (err) {
+                    // Never let one bad chat's local-cache bookkeeping crash the
+                    // whole batch - that used to reject the Promise.all below and
+                    // leave chatsLoaded stuck false forever, even though the
+                    // server had already responded correctly.
+                    console.log("chat processing error", err);
+                    dict[data._id] = data;
                   }
-                  dict[data._id] = data;
-                  await db
-                    .transaction("chats", "readwrite")
-                    .objectStore("chats")
-                    .put(data);
                 })
               );
               const type = datagroup.type;
