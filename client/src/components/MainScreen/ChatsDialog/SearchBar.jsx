@@ -15,33 +15,40 @@ export default function (props){
     const {setChatdata,privateChats,socket}=useCtx();
     const ref=useRef('');
     const options=useRef('');
-    const [target,setTarget]=useState(3);
+    const [target,setTarget]=useState(0);
     const [searching,setSearching]=useState(false);
-    const onChange=useCallback(()=>{
+    const reqId=useRef(0);
+    const debounceTimer=useRef(null);
+
+    const runSearch=useCallback(()=>{
         const query=ref.current.value
         if(query){
          setSearching(true);
-         socket.current.emit('search',{query:query,target:target})
+         reqId.current+=1;
+         socket.current.emit('search',{query:query,target:target,reqId:reqId.current})
         }
         else {
+         reqId.current+=1;
          setSearching(false);
          setChatdata(props.cache.current.chats)
         }
         },[target])
 
-    useEffect(onChange,[target])
+    const onChange=useCallback(()=>{
+        if(debounceTimer.current) clearTimeout(debounceTimer.current);
+        debounceTimer.current=setTimeout(runSearch,250);
+        },[runSearch])
+
+    useEffect(runSearch,[target])
     useEffect(()=>{
          socket.current.on('searchResults',(results)=>{
+            if(results.reqId!==reqId.current) return;
             setSearching(false);
             const dict={};
-            const flag=results.target===1;
             results.results.forEach((data)=>{
                 if(data){
-                if(flag){
-                    if(privateChats.current[data._id])
-                        data=props.cache.current.chats[privateChats.current[data._id]]||data
-                    else data.type='user'
-                }
+                if(data.type==='user' && privateChats.current[data._id])
+                    data=props.cache.current.chats[privateChats.current[data._id]]||data
                 dict[data._id]=data;
                 }
             })

@@ -136,33 +136,86 @@ async function onConnection(socket, io) {
     socket.on("sendMessage", SendMessage);
 
     socket.on("search", async (stream) => {
-      console.log(stream);
-      const term = new RegExp(xss(`${stream.query}`), "i");
-      const model =
-        stream.target == 1
-          ? models.UsersModel
-          : stream.target == 2
-          ? models.MessagesModel
-          : models.ChatsModel;
-      const data = await model.aggregate([
-        {
-          $match: {
-            $and: [
-              {
-                $or: [
-                  { name: { $regex: term } },
-                  { username: { $regex: term } },
-                ],
+      try {
+        const escaped = xss(`${stream.query}`).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const term = new RegExp(escaped, "i");
+        const chatIds = [...chatSet].map((id) => new ObjectID(id));
+
+        const searchUsers = async () => {
+          const users = await models.UsersModel.aggregate([
+            {
+              $match: {
+                $or: [{ name: { $regex: term } }, { username: { $regex: term } }],
               },
-              { type: { $ne: "private" } },
-            ],
-          },
-        },
-        { $project: { password: 0, email: 0 } },
-        { $sort: { username: 1 } },
-        { $limit: 10 },
-      ]);
-      socket.emit("searchResults", { results: data, target: stream.target });
+            },
+            { $project: { password: 0, email: 0 } },
+            { $sort: { username: 1 } },
+            { $limit: 10 },
+          ]);
+          return users.map((u) => ({ ...u, type: "user" }));
+        };
+
+        const searchChatsByName = () =>
+          models.ChatsModel.aggregate([
+            {
+              $match: {
+                _id: { $in: chatIds },
+                type: { $ne: "private" },
+                $or: [{ name: { $regex: term } }, { username: { $regex: term } }],
+              },
+            },
+            { $sort: { name: 1 } },
+            { $limit: 10 },
+          ]);
+
+        // "Messages" search: find chats (the user is in) containing a matching message.
+        const searchChatsByMessage = () =>
+          models.MessagesModel.aggregate([
+            { $match: { chat: { $in: chatIds }, content: { $regex: term } } },
+            { $sort: { updatedAt: -1 } },
+            { $group: { _id: "$chat", updatedAt: { $first: "$updatedAt" } } },
+            { $sort: { updatedAt: -1 } },
+            { $limit: 10 },
+            {
+              $lookup: {
+                from: "chats",
+                localField: "_id",
+                foreignField: "_id",
+                as: "chatDoc",
+              },
+            },
+            { $unwind: "$chatDoc" },
+            { $replaceRoot: { newRoot: "$chatDoc" } },
+          ]);
+
+        let data;
+        if (stream.target == 1) {
+          data = await searchUsers();
+        } else if (stream.target == 2) {
+          data = await searchChatsByMessage();
+        } else if (stream.target == 3) {
+          data = await searchChatsByName();
+        } else {
+          const [users, byName, byMessage] = await Promise.all([
+            searchUsers(),
+            searchChatsByName(),
+            searchChatsByMessage(),
+          ]);
+          const chats = [...byName];
+          const seen = new Set(chats.map((c) => c._id.toString()));
+          byMessage.forEach((c) => {
+            if (!seen.has(c._id.toString())) {
+              seen.add(c._id.toString());
+              chats.push(c);
+            }
+          });
+          data = [...chats, ...users];
+        }
+
+        socket.emit("searchResults", { results: data, target: stream.target, reqId: stream.reqId });
+      } catch (err) {
+        console.log(err);
+      }
     });
     socket.on("report", async ({ id, targetType, reason }) => {
       if (!id || !["user", "chat", "message"].includes(targetType)) return;
