@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "seed": "node generator.js"
+    "seed": "node generator.js",
+    "seed:demo-users": "node seedDemoUsers.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
