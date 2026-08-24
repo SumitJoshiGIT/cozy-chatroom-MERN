@@ -25,6 +25,8 @@ function ChatScreen(props) {
   const [blocked, setBlocked] = useState(new Set());
   const [typingUsers, setTypingUsers] = useState({});
   const [messageDialog, setMessageDialog] = useState(0);
+  const [chatsLoaded, setChatsLoaded] = useState(false);
+  const [loadedChats, setLoadedChats] = useState(new Set());
   const chatCache = useRef({ query: {}, chats: {} });
   const typingTimers = useRef({});
 
@@ -136,6 +138,7 @@ function ChatScreen(props) {
             chatCache.current["chats"] = store;
 
             socket.current.on(`messages`, async (stream) => {
+              setLoadedChats((prev) => new Set(prev).add(stream.id));
               const store = {};
               if (stream.data) {
                 let dat = stream.data;
@@ -328,6 +331,7 @@ function ChatScreen(props) {
                   ? dict
                   : { ...chatCache.current.chats, ...dict };
               setChatdata(chatCache.current[datagroup.type] || {});
+              if (type === "chats") setChatsLoaded(true);
             });
 
             socket.current.on("contacts", (data) => {
@@ -401,6 +405,8 @@ function ChatScreen(props) {
         chatdata,
         privateChats,
         setChatdata,
+        chatsLoaded,
+        loadedChats,
         contacts,
         setChatID,
         setMessages,

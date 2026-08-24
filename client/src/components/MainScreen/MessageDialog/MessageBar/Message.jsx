@@ -12,6 +12,7 @@ import edit from "/edit.svg";
 import fileIcon from "/files.svg";
 import { downloadFile } from "../../../../download";
 import { useToast } from "../../../ui/Toast";
+import Spinner from "../../../ui/Spinner";
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const formatSize = (bytes) => {
   if (!bytes) return "";
@@ -24,6 +25,7 @@ export default function (props) {
   const { profiles, db, userID, Messages, chatID, socket, starred, toggleStar, chatdata, pinMessage, unpinMessage, reactMessage, report } = useCtx();
   const contextref = useRef();
   const [showReactions, setShowReactions] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const toast = useToast();
   const messageItem = props.item;
   if (!messageItem.status) {
@@ -125,6 +127,7 @@ export default function (props) {
   };
   const myReaction = (messageItem.reactions||[]).find(r => (r.users||[]).includes(userID.current));
   const deleteHandle = () => {
+    setDeleting(true);
     socket.current.emit("deleteMessage", [
       messageItem.mid,
       messageItem._id,
@@ -151,6 +154,11 @@ export default function (props) {
       </div>
 
       <div onContextMenu={handleRight} className="relative max-w-[75%] md:max-w-[60%]">
+        {deleting && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/30 rounded-2xl z-10">
+            <Spinner size="sm" />
+          </div>
+        )}
         <div
           className={`px-2.5 py-1.5 shadow-sm relative
             ${flag ? "bg-[#DCF8C6] dark:bg-[#245a4b] dark:text-gray-100" : "bg-white dark:bg-gray-700 dark:text-gray-100"}
@@ -222,7 +230,11 @@ export default function (props) {
                   {isStarred && <span className="text-amber-500">★</span>}
                   {messageItem.edited && <span className="italic">edited</span>}
                   {pad(time.getHours())}:{pad(time.getMinutes())}
-                  {flag && <span className={messageItem.status === "✔✔" ? "text-purple-500" : ""}>{messageItem.status}</span>}
+                  {flag && (messageItem.status === "⧖" ? (
+                    <Spinner size="xs" className="align-middle" />
+                  ) : (
+                    <span className={messageItem.status === "✔✔" ? "text-purple-500" : ""}>{messageItem.status}</span>
+                  ))}
                 </span>
               </div>
             )}

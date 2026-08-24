@@ -13,8 +13,9 @@ import TitleBar from "./TitleBar/TitleBar";
 import background from "/background.jpg";
 import icon from "/icon.svg";
 import { getWallpaper, setWallpaperFor } from "../../../wallpaper";
+import Spinner from "../../ui/Spinner";
 export default function MessageDialog(props) {
-  const { Messages, chatID, scrollable, socket, chatdata, userID, unpinMessage } = useCtx();
+  const { Messages, chatID, scrollable, socket, chatdata, userID, unpinMessage, loadedChats } = useCtx();
   const [reply, setReply] = useState();
   const [edit, setEdit] = useState();
   const [forward, setForward] = useState();
@@ -34,6 +35,7 @@ export default function MessageDialog(props) {
   );
 
   const m = Messages[chatID.id];
+  const messagesLoading = !!chatID.id && !loadedChats.has(chatID.id);
   const chat = chatdata[chatID.id] || {};
   const canPin = chat.type !== 'group' || (chat.admins||[]).includes(userID.current) || chat.owner===userID.current;
 
@@ -139,6 +141,10 @@ export default function MessageDialog(props) {
             <div className="text-purple-950/80 font-medium">Pick a conversation to get started</div>
             <div className="text-gray-400 text-sm max-w-64 text-center">Your chats live on the left — select one, or start a new group.</div>
           </div>
+        </div>
+      ) : messagesLoading ? (
+        <div className="flex-1 w-full flex items-center justify-center">
+          <Spinner size="lg" />
         </div>
       ) : (
         <div

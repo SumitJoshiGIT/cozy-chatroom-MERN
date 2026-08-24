@@ -9,6 +9,7 @@ import Card from "../../../ui/Card";
 import IconButton from "../../../ui/IconButton";
 import Button from "../../../ui/Button";
 import { TextField } from "../../../ui/TextField";
+import Spinner from "../../../ui/Spinner";
 import send from "/send.svg";
 
 export default function (props){
@@ -17,9 +18,17 @@ export default function (props){
     const fileform=useRef({});
     const [chatnameSt,setUsername]=useState('');
     const [members,setMembers]=useState(new Set());
+    const [creating,setCreating]=useState(false);
 
     const createGroup = () => {
          if(!chatnameSt.trim()) return;
+         setCreating(true);
+         socket.current.once('chat', (datagroup) => {
+           if (datagroup.type === 'chats') {
+             setCreating(false);
+             setMessageDialog(0);
+           }
+         });
          socket.current.emit('createChat',{
            name: chatnameSt,
            members: [...members.keys()],
@@ -28,7 +37,6 @@ export default function (props){
            imgName: fileform.current.name,
            size: fileform.current.size,
          });
-         setMessageDialog(0);
     }
 
     return <Card className='max-w-md w-full h-full flex flex-col overflow-hidden animate-fade-in-up'>
@@ -58,10 +66,14 @@ export default function (props){
         <div className="text-sm text-gray-500">{members.size} member{members.size===1?'':'s'} selected</div>
         <Button
           onClick={createGroup}
-          disabled={!chatnameSt.trim()}
+          disabled={!chatnameSt.trim() || creating}
           className="gap-2"
         >
-          Create <img src={send} className="w-3.5 h-3.5 invert" alt="" />
+          {creating ? (
+            <Spinner size="xs" color="white" />
+          ) : (
+            <>Create <img src={send} className="w-3.5 h-3.5 invert" alt="" /></>
+          )}
         </Button>
       </div>
     </Card>

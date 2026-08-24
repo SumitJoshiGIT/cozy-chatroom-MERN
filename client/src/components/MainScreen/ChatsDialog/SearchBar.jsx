@@ -1,6 +1,7 @@
 import React,{useState,useEffect,useRef,useMemo,useCallback} from "react"
 import { useCtx } from "../AppScreen";
 import IconButton from "../../ui/IconButton";
+import Spinner from "../../ui/Spinner";
 import option from '/options.svg'
 
 const FILTERS = [
@@ -15,16 +16,23 @@ export default function (props){
     const ref=useRef('');
     const options=useRef('');
     const [target,setTarget]=useState(3);
+    const [searching,setSearching]=useState(false);
     const onChange=useCallback(()=>{
         const query=ref.current.value
-        if(query)
+        if(query){
+         setSearching(true);
          socket.current.emit('search',{query:query,target:target})
-        else setChatdata(props.cache.current.chats)
+        }
+        else {
+         setSearching(false);
+         setChatdata(props.cache.current.chats)
+        }
         },[target])
 
     useEffect(onChange,[target])
     useEffect(()=>{
          socket.current.on('searchResults',(results)=>{
+            setSearching(false);
             const dict={};
             const flag=results.target===1;
             results.results.forEach((data)=>{
@@ -44,6 +52,7 @@ export default function (props){
      <div className="rounded-full p-2 items-center justify-center w-full overflow-clip h-fit flex ring-1 ring-gray-300 bg-white ">
 
       <input ref={ref}  placeholder='Search ' className="active:outline-none pl-2 outline-none w-full  p-0 bg-transparent"  onChange={onChange}/>
+      {searching && <Spinner size="xs" className="mr-2 shrink-0" />}
       <IconButton icon={option} alt="Filters" size="sm" onClick={()=>options.current.classList.toggle('hidden')} />
       </div>
 
