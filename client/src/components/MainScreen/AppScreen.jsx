@@ -323,7 +323,11 @@ function ChatScreen(props) {
 
             socket.current.on("profile", async (data) => {
               if (data) {
-                if (data.img) data.img.src = `${apiOrigin}/${data.img.src}`;
+                // Cache-bust: the server always writes an avatar to the same
+                // filename (<id>.<ext>), so re-uploading one keeps the exact
+                // same URL - without a query param the browser never
+                // re-fetches it and the old image just stays on screen.
+                if (data.img) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
                 setProfiles((prev) => {
                   const obj = { ...prev };
                   obj[data._id] = { ...(obj[data._id] || {}), ...data };
@@ -344,7 +348,8 @@ function ChatScreen(props) {
               await Promise.all(
                 datagroup.chats.map(async (data) => {
                   try {
-                    if (data.img) data.img.src = `${apiOrigin}/${data.img.src}`;
+                    // See the "profile" handler above for why this needs cache-busting.
+                    if (data.img) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
                     if (data.type == "private") {
                       data.users.forEach((uid) => {
                         if (uid != userID.current) {
@@ -446,7 +451,8 @@ function ChatScreen(props) {
       socket.current.on("auth", async (data) => {
         user = { ...user, ...data };
         if (data) {
-          if (data.img) data.img.src = `${apiOrigin}/${data.img.src}`;
+          // See the "profile" handler above for why this needs cache-busting.
+          if (data.img) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
           if (data.blocked) setBlocked(new Set(data.blocked.map(String)));
           db.transaction("meta", "readwrite")
             .objectStore("meta")
