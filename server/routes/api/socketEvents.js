@@ -479,12 +479,11 @@ async function onConnection(socket, io) {
 
     socket.on("messages", async (stream) => {
       try {
-         console.log(stream);
          const obj = { chat: new ObjectID(stream.cid) };
          if(!chatSet.has(stream.cid))obj.type='group'
            //if (stream.mid)
           //obj.mid = stream.gt ? { $gt: stream.mid } : { $lt: stream.mid };
-         
+
          const data = await models.MessagesModel.aggregate([
           { $match: obj },
           { $limit: 30 },
@@ -503,12 +502,14 @@ async function onConnection(socket, io) {
             },
           },
         ]);
-        if (data.length) {
-          io.to(stream.cid).emit(`messages`, { id: stream.cid, data: data });
-          console.log("len",data.length)
-        
-          //  console.log(data);
-        }
+        // Always respond, even with an empty list - the client marks a chat
+        // "loaded" (and stops showing the spinner) only when this event
+        // arrives. Skipping the emit for chats with zero messages used to
+        // leave those chats stuck loading forever, which in turn meant a
+        // freshly-typed message's own <Message> bubble never mounted (it's
+        // gated behind the same loading check), so its send-on-mount effect
+        // never fired and the message never actually reached the server.
+        socket.emit(`messages`, { id: stream.cid, data: data });
       } catch (err) {
         console.log(err);
       }
