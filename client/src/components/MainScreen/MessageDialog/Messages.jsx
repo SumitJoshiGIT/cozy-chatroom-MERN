@@ -44,12 +44,18 @@ export default function MessageDialog(props) {
   // got caught up eagerly via the sync-manifest handshake in AppScreen, so
   // this effect only fires for a chat that's genuinely never been loaded on
   // this device (first open, or a cleared local cache).
+  // chatID.type === "user" means there's no chat yet (first message to a
+  // contact) - chatID.id is the other user's _id, not a chat _id, so it can
+  // never appear in chatSet server-side or in loadedChats client-side. Emitting
+  // "messages" for it is pointless (server silently no-ops, not a chat member),
+  // and treating it as perpetually loading hid the message list (and the
+  // pending-message row whose mount is what actually sends the message).
   useEffect(() => {
-    if (!chatID.id || loadedChats.has(chatID.id)) return;
+    if (!chatID.id || chatID.type === "user" || loadedChats.has(chatID.id)) return;
     socket.current.emit("messages", { cid: chatID.id, mode: "before", cursorMid: null });
   }, [chatID.id]);
 
-  const messagesLoading = !!chatID.id && !loadedChats.has(chatID.id);
+  const messagesLoading = !!chatID.id && chatID.type !== "user" && !loadedChats.has(chatID.id);
   const chat = chatdata[chatID.id] || {};
   const canPin = chat.type !== 'group' || (chat.admins||[]).includes(userID.current) || chat.owner===userID.current;
 

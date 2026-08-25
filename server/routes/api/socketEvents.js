@@ -786,7 +786,9 @@ async function onConnection(socket, io) {
         }
         socket.join(data._id.toString());
         socket.emit(`private.${stream.cid}`,data);
-        if (stream.content)
+        // A file-only first message (no text) has falsy stream.content -
+        // guarding on it alone silently dropped every such message.
+        if (stream.content || (Array.isArray(stream.attachments) && stream.attachments.length))
           SendMessage({
             content: stream.content,
             cid: data._id.toString(),

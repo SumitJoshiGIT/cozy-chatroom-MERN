@@ -177,13 +177,34 @@ function ChatScreen(props) {
                 setMessages((prev) => {
                   const store2 = { ...prev };
                   if (stream.replace) {
-                    delete store2[stream.id][stream.replace];
+                    // The first message to a brand-new contact is optimistically
+                    // filed under a pseudo chat-id (the other user's _id, since
+                    // no chat exists yet - see chatID.type === "user") but the
+                    // server only creates the real chat once this message is
+                    // sent, so this ack's stream.id is a *different* key than
+                    // where the pending message actually lives. Find whichever
+                    // bucket holds it (instead of assuming it's store2[stream.id],
+                    // which crashed here with "Cannot convert undefined or null
+                    // to object" when it didn't exist yet) and migrate it.
+                    let sourceKey = store2[stream.id]?.[stream.replace] ? stream.id : null;
+                    if (!sourceKey) {
+                      sourceKey = Object.keys(store2).find((k) => store2[k]?.[stream.replace]);
+                    }
+                    if (sourceKey) {
+                      const migrated = { ...(store2[stream.id] || {}), ...store2[sourceKey] };
+                      delete migrated[stream.replace];
+                      if (sourceKey !== stream.id) delete store2[sourceKey];
+                      store2[stream.id] = migrated;
+                      if (sourceKey !== stream.id && chatIDRef.current.id === sourceKey) {
+                        setChatID({ id: stream.id, type: "private" });
+                      }
+                    }
                     db.transaction("messages", "readwrite")
                       .objectStore("messages")
                       .delete(stream.replace);
                   }
                   store2[stream.id] = { ...(store2[stream.id] || {}), ...store };
-  
+
                   return store2;
                 });
               }
