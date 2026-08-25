@@ -30,7 +30,7 @@ export default function StarredMessages(props) {
         {(starredMessages || []).map((m) => {
           const profile = profiles[m.uid] || {};
           const chat = chatdata[m.chat] || {};
-          const time = new Date(m.updatedAt);
+          const time = new Date(m.createdAt);
           return (
             <div key={m._id} className="flex items-start gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50">
               <Avatar src={profile.img && profile.img.src} size="xs" />

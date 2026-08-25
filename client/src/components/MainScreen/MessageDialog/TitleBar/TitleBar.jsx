@@ -15,16 +15,18 @@ export default function (props){
 
     const {chatID,db,chatdata,socket,profiles,userID,typingUsers,report:reportFn,deleteChat}=useCtx()
     let chat=(chatdata)&&chatdata[chatID.id]||{};
-    const [user,setUser]=useState(null);
     const [showWallpaper,setShowWallpaper]=useState(false);
     const [confirmDelete,setConfirmDelete]=useState(false);
     const option=useRef();
     const isOwner = chat.type==='group' && chat.owner && userID.current===chat.owner;
-
-    useEffect(()=>{
-      setUser(profiles[userID.current]);
-
-    },[chat,profiles])
+    // Membership must come from the chat doc's own `users` list, not the
+    // locally-cached user.Chats array - that cache is populated by separate
+    // code paths (join/create/backstop-sync) and can lag or miss entries,
+    // which used to make a chat you're already in show a bogus Join button.
+    // Only render the button once chat.users has actually loaded, so we
+    // never flash it during the moment chatdata hasn't populated yet.
+    const membershipKnown = Array.isArray(chat.users);
+    const showJoin = chatID.type!='user' && membershipKnown && !chat.users.includes(userID.current);
 
     const otherProfile = chat.type !== 'group' ? profiles[chat.sender] : null;
     const memberCount = chat.users && chat.users.length;
@@ -89,7 +91,7 @@ export default function (props){
         </div>
         </div>
         <div className="flex items-center">
-        {(user&&(chatID.type!='user'&&(!user.Chats.includes(chatID.id))))&&<Button variant="primary" className="mr-2 w-24" onClick={()=>{socket.current.emit("join",[chatID.id])}}>Join</Button>}
+        {showJoin&&<Button variant="primary" className="mr-2 w-24" onClick={()=>{socket.current.emit("join",[chatID.id])}}>Join</Button>}
    
         <IconButton icon={options} alt="Options" onClick={()=>{
             if(option.current){

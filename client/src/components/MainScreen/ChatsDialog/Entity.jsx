@@ -119,8 +119,8 @@ export default function (props) {
             </div>
             {latest && (
               <span className="text-xs text-gray-400 shrink-0">
-                {pad(new Date(latest.updatedAt).getHours())}:
-                {pad(new Date(latest.updatedAt).getMinutes())}
+                {pad(new Date(latest.createdAt).getHours())}:
+                {pad(new Date(latest.createdAt).getMinutes())}
               </span>
             )}
           </div>

@@ -71,7 +71,7 @@ export default function MessageDialog(props) {
   const rows = [];
   if (m) {
     Object.values(m).forEach((message) => {
-      const date = new Date(message.updatedAt);
+      const date = new Date(message.createdAt);
       const day = date.toDateString();
       if (day !== prevDay) {
         prevDay = day;

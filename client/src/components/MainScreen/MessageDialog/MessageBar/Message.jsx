@@ -54,7 +54,10 @@ export default function (props) {
         .put(messageItem);
   }
   const profile = profiles[messageItem.uid] || {};
-  const time = new Date(messageItem.updatedAt);
+  // createdAt, not updatedAt - markSeen/reactions/edits bump updatedAt, which
+  // used to make a message's displayed send-time jump to "now" whenever its
+  // status flipped to read.
+  const time = new Date(messageItem.createdAt);
   const flag = messageItem.uid == userID.current;
   const repliedMessage = props.reply_to
     ? props.reply_data || messageItem.replyToMessage
