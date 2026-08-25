@@ -6,7 +6,6 @@ import Avatar from "../../ui/Avatar";
 export default function (props) {
   const {
     chatID,
-    Messages,
     socket,db,
     profiles,
     chatdata,
@@ -21,7 +20,6 @@ export default function (props) {
   
   const [chatid, setId] = useState(props.id);
   let chat = chatdata[chatid];
-  const [latest, setLatest] = useState("");
   useEffect(()=>{
   if(chat.type=='private'){
     if(profiles[chat.sender]){
@@ -47,20 +45,7 @@ export default function (props) {
     });
   };
 
-  useEffect(() => {
-    const curr = Object.values(Messages[chat._id] || {}).pop();
-      socket.current.emit("messages", {
-        cid: chat._id,
-        mid: curr ? curr.mid : -1,
-        gt: true,
-      });
-    },[])
-  
-  useEffect(() => {
-    if (Messages[chat._id]) setLatest(Object.values(Messages[chat._id]).pop());
-  }, [Messages[chat._id]]);
-  
-  useEffect(()=>{   
+  useEffect(()=>{
     if (chat.type == "user") {
       socket.current.on(`private.${chat._id}`, (newchat) => {
         newchat.sender = chat._id;
@@ -78,17 +63,22 @@ export default function (props) {
 
   const active = chatID.id === chat._id;
   const pad = (n) => n.toString().padStart(2, "0");
-  const attachmentPreviewLabel = (attachment) => {
-    const type = (attachment.contentType || attachment.type || "");
+  // Sourced from chat.lastMessage (denormalized server-side) rather than the
+  // loaded message list - the sidebar needs to show a preview for chats
+  // whose message history hasn't been fetched at all (messages now load
+  // lazily, only once a chat is actually opened).
+  const latest = chat.lastMessage;
+  const attachmentPreviewLabel = (contentType, name) => {
+    const type = contentType || "";
     if (type.startsWith("image/")) return "📷 Photo";
     if (type.startsWith("video/")) return "🎥 Video";
     if (type.startsWith("audio/")) return "🎤 Voice message";
-    return `📎 ${attachment.name || "File"}`;
+    return `📎 ${name || "File"}`;
   };
   const previewText = latest
     ? (latest.content
-        || (latest.attachments && latest.attachments.length ? attachmentPreviewLabel(latest.attachments[0]) : "")
-        || (latest.location ? (latest.location.live ? "📍 Live location" : "📍 Location") : ""))
+        || (latest.attachmentType ? attachmentPreviewLabel(latest.attachmentType, latest.attachmentName) : "")
+        || (latest.type === "location" ? (latest.liveLocation ? "📍 Live location" : "📍 Location") : ""))
     : "";
   const previewName = latest
     ? (latest.uid == userID.current ? "You" : (profiles[latest.uid] ? profiles[latest.uid].name : ""))

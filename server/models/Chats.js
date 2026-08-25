@@ -50,6 +50,24 @@ const Chats=new mongoose.Schema
     default:null,
     ref:'Permissions',
     type:mongoose.Schema.Types.ObjectId
+   },
+   // Denormalized so the chat list can show a preview and the sync manifest
+   // can tell a chat changed without ever loading its message history.
+   lastMessage:{
+    type:new mongoose.Schema({
+        _id:mongoose.Schema.Types.ObjectId,
+        mid:Number,
+        uid:mongoose.Schema.Types.ObjectId,
+        type:String,
+        content:String,
+        // Just enough to render the sidebar preview (📷/🎥/🎤/📍 labels)
+        // without ever loading the full message/attachment list.
+        attachmentType:String,
+        attachmentName:String,
+        liveLocation:Boolean,
+        createdAt:Date,
+    },{_id:false}),
+    default:null,
    }
 },
    {timestamps:true}

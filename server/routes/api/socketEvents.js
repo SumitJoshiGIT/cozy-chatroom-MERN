@@ -58,6 +58,32 @@ async function saveUpload(base64, mimeType, name, size, extraTypes) {
   await fs.promises.writeFile(path.join(process.cwd(), "public", src), buffer);
   return { src, name, size, contentType: normalizedType };
 }
+
+// Denormalized onto Chats so the sync manifest can tell a chat changed
+// without loading message history, and the sidebar can show a preview
+// without having fetched that chat's messages at all (see the lazy/eager
+// message-sync redesign). A lightweight findByIdAndUpdate rather than a
+// full chat.save() - avoids loading/re-serializing the whole chat doc, and
+// (since Chats has timestamps:true) bumps updatedAt as a side effect, which
+// is what makes the sync manifest's updatedAt diff fire on new messages.
+async function updateLastMessage(cid, message) {
+  const firstAttachment = Array.isArray(message.attachments) && message.attachments.length ? message.attachments[0] : null;
+  await models.ChatsModel.findByIdAndUpdate(cid, {
+    $set: {
+      lastMessage: {
+        _id: message._id,
+        mid: message.mid,
+        uid: message.uid,
+        type: message.type,
+        content: message.content,
+        attachmentType: firstAttachment ? firstAttachment.contentType : undefined,
+        attachmentName: firstAttachment ? firstAttachment.name : undefined,
+        liveLocation: message.location ? !!message.location.live : undefined,
+        createdAt: message.createdAt,
+      },
+    },
+  });
+}
 async function onConnection(socket, io) {
   // Every socket.on(...) handler below is async and mostly unguarded. On
   // Node's current default, an unhandled rejection kills the whole process -
@@ -125,6 +151,7 @@ async function onConnection(socket, io) {
         });
         try {
           await newMessage.save();
+          await updateLastMessage(message.cid, newMessage);
           io.to(message.cid).emit(`messages`, {
             id: message.cid,
             replace: message.replace,
@@ -188,6 +215,7 @@ async function onConnection(socket, io) {
           },
         });
         await newMessage.save();
+        await updateLastMessage(stream.cid, newMessage);
         io.to(stream.cid).emit("messages", {
           id: stream.cid,
           replace: stream.replace,
@@ -417,6 +445,14 @@ async function onConnection(socket, io) {
           _id: (id),
           chat:(cid),
         });
+        if (success) {
+          const chat = await models.ChatsModel.findById(cid, "lastMessage");
+          if (chat && chat.lastMessage && chat.lastMessage._id.toString() === success._id.toString()) {
+            const newest = await models.MessagesModel.findOne({ chat: cid }).sort({ mid: -1 });
+            if (newest) await updateLastMessage(cid, newest);
+            else await models.ChatsModel.findByIdAndUpdate(cid, { $set: { lastMessage: null } });
+          }
+        }
       }
       if (!success) success = { cid: cid, mid: mid, _id: id };
       socket.emit(`deleteMessage`, [success._id, success.mid, success.chat]);
@@ -429,6 +465,10 @@ async function onConnection(socket, io) {
       message.content = xss(content);
       message.edited = true;
       await message.save();
+      const chat = await models.ChatsModel.findById(cid, "lastMessage");
+      if (chat && chat.lastMessage && chat.lastMessage._id.toString() === message._id.toString()) {
+        await updateLastMessage(cid, message);
+      }
       io.to(cid).emit("editMessage", { id: message._id, mid: message.mid, cid, content: message.content, edited: true });
     });
 
@@ -476,6 +516,12 @@ async function onConnection(socket, io) {
     socket.on("markSeen", async ({ cid }) => {
       if (!cid || !chatSet.has(cid)) return;
       try {
+        const chat = await models.ChatsModel.findById(cid, "lastMessage");
+        await models.ReadPositionsModel.findOneAndUpdate(
+          { user: profile._id, chat: cid },
+          { $set: { lastReadMid: chat && chat.lastMessage ? chat.lastMessage.mid : -1, lastReadAt: new Date() } },
+          { upsert: true }
+        );
         const result = await models.MessagesModel.updateMany(
           { chat: cid, uid: { $ne: profile._id }, status: { $ne: "✔✔" } },
           { $set: { status: "✔✔" } }
@@ -488,6 +534,34 @@ async function onConnection(socket, io) {
       }
     });
     socket.on("chats", async (stream) => {
+      if (stream.type === "sync") {
+        // Manifest handshake: the client tells us the updatedAt it already
+        // has cached per chat; we only send back full docs for chats that
+        // actually changed (metadata) or have unread messages (per
+        // ReadPositions) - everything else is already correct on the
+        // client and gets skipped entirely (the "lazy" half of the sync).
+        const known = stream.known || {};
+        const serverChats = await models.ChatsModel.find({ _id: { $in: [...chatSet] } });
+        const readPositions = await models.ReadPositionsModel.find({ user: profile._id, chat: { $in: [...chatSet] } });
+        const readByChat = new Map(readPositions.map((r) => [r.chat.toString(), r.lastReadMid]));
+
+        const changed = [];
+        for (const chat of serverChats) {
+          const cid = chat._id.toString();
+          const lastReadMid = readByChat.has(cid) ? readByChat.get(cid) : -1;
+          const unreadCount = chat.lastMessage && chat.lastMessage.mid > lastReadMid
+            ? chat.lastMessage.mid - lastReadMid
+            : 0;
+          const knownAt = known[cid];
+          const isStale = !knownAt || new Date(knownAt).getTime() < chat.updatedAt.getTime();
+          if (isStale || unreadCount > 0) {
+            changed.push({ ...chat.toObject(), unreadCount, lastReadMid });
+          }
+        }
+        const removedIds = Object.keys(known).filter((id) => !chatSet.has(id));
+        socket.emit("chat", { type: "sync", changed, removedIds });
+        return;
+      }
       const data = await models.ChatsModel.find({ _id: { $in: [...chatSet] } });
       socket.emit("chat", {
         type: stream.type,
@@ -498,14 +572,32 @@ async function onConnection(socket, io) {
 
     socket.on("messages", async (stream) => {
       try {
-         const obj = { chat: new ObjectID(stream.cid) };
-         if(!chatSet.has(stream.cid))obj.type='group'
-           //if (stream.mid)
-          //obj.mid = stream.gt ? { $gt: stream.mid } : { $lt: stream.mid };
+        // Non-member guard - the old version of this checked `chatSet.has`
+        // by filtering on the Message.type field, which doesn't actually
+        // restrict access (message type defaults to "text", not "group").
+        if (!chatSet.has(stream.cid)) return;
 
-         const data = await models.MessagesModel.aggregate([
-          { $match: obj },
-          { $limit: 30 },
+        const match = { chat: new ObjectID(stream.cid) };
+        const limit = stream.mode === "after" ? 100 : 30;
+        let sort;
+        if (stream.mode === "after") {
+          // Eager catch-up (unread pull / reconnect resume): everything
+          // newer than the client's cursor, capped so one heavily-unread
+          // chat can't drag in thousands of messages on reconnect - anything
+          // beyond the cap is still reachable via "before" once the chat is
+          // actually opened.
+          if (stream.cursorMid != null) match.mid = { $gt: stream.cursorMid };
+          sort = { mid: 1 };
+        } else {
+          // Lazy load (chat opened, or scrolling up for older history).
+          if (stream.cursorMid != null) match.mid = { $lt: stream.cursorMid };
+          sort = { mid: -1 };
+        }
+
+        let data = await models.MessagesModel.aggregate([
+          { $match: match },
+          { $sort: sort },
+          { $limit: limit + 1 },
           {
             $lookup: {
               from: "messages",
@@ -521,6 +613,10 @@ async function onConnection(socket, io) {
             },
           },
         ]);
+        const hasMore = data.length > limit;
+        data = data.slice(0, limit);
+        if (sort.mid === -1) data.reverse(); // always return ascending, so the client can append directly
+
         // Always respond, even with an empty list - the client marks a chat
         // "loaded" (and stops showing the spinner) only when this event
         // arrives. Skipping the emit for chats with zero messages used to
@@ -528,7 +624,7 @@ async function onConnection(socket, io) {
         // freshly-typed message's own <Message> bubble never mounted (it's
         // gated behind the same loading check), so its send-on-mount effect
         // never fired and the message never actually reached the server.
-        socket.emit(`messages`, { id: stream.cid, data: data });
+        socket.emit(`messages`, { id: stream.cid, mode: stream.mode, data, hasMore });
       } catch (err) {
         console.log(err);
       }

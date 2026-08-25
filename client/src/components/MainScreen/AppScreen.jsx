@@ -128,6 +128,11 @@ function ChatScreen(props) {
               });
               return { ...prev, ...store };
             });
+            // A chat with >=1 locally cached message already has history to
+            // show - mark it loaded immediately so it skips the spinner and
+            // doesn't get blindly re-fetched from the server on every fresh
+            // page load, which is what happened before this was seeded here.
+            setLoadedChats((prev) => new Set([...prev, ...data.map((message) => message.chat)]));
           };
 
           c.onsuccess = (event) => {
@@ -174,7 +179,7 @@ function ChatScreen(props) {
                 });
               }
             });
-            socket.current.on("leaveChat", ([id, del]) => {
+            const removeChatLocally = (id) => {
               if (chatIDRef.current.id == id) setChatID({ id: null, type: null });
               setMessages((prev) => {
                 const store = { ...prev };
@@ -203,6 +208,10 @@ function ChatScreen(props) {
                 delete data[id];
                 return { ...data };
               });
+            };
+
+            socket.current.on("leaveChat", ([id, del]) => {
+              removeChatLocally(id);
             });
   
             socket.current.on("deleteMessage", ([id, mid, cid]) => {
@@ -345,8 +354,9 @@ function ChatScreen(props) {
             socket.current.on("chat", async (datagroup) => {
               let dict = {};
               if (!Array.isArray(user.Chats)) user.Chats = [];
+              const chatsList = datagroup.type === "sync" ? datagroup.changed : datagroup.chats;
               await Promise.all(
-                datagroup.chats.map(async (data) => {
+                (chatsList || []).map(async (data) => {
                   try {
                     // See the "profile" handler above for why this needs cache-busting.
                     if (data.img) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
@@ -398,16 +408,37 @@ function ChatScreen(props) {
               );
               const type = datagroup.type;
 
-              if (datagroup.append)
-                dict = { ...dict, ...chatCache.current.query };
-              chatCache.current[type] =
-                type == "query"
-                  ? dict
-                  : { ...chatCache.current.chats, ...dict };
-              setChatdata(chatCache.current[datagroup.type] || {});
-              if (type === "chats" || type === "upchats") {
+              if (type === "sync") {
+                (datagroup.removedIds || []).forEach((id) => removeChatLocally(id));
+              }
+
+              // Always the same cache key, whichever type of "chat" event this
+              // was - previously the initial "upchats" response landed in
+              // chatCache.current.upchats while every later single-chat push
+              // (rename, pin, etc.) merged into chatCache.current.chats, so
+              // the first live update after load silently reverted the whole
+              // visible list back to the stale pre-sync snapshot.
+              chatCache.current.chats = { ...chatCache.current.chats, ...dict };
+              setChatdata(chatCache.current.chats);
+
+              if (type === "sync" || type === "chats" || type === "upchats") {
                 chatsReadyRef.current = true;
                 setChatsLoaded(true);
+              }
+
+              if (type === "sync") {
+                // Eager half: for every chat the manifest says has unread
+                // messages, pull them immediately without waiting for the
+                // user to open that chat. Staggered in small batches so a
+                // reconnect after being offline in many chats doesn't fire
+                // a burst of simultaneous requests.
+                (datagroup.changed || [])
+                  .filter((data) => data.unreadCount > 0)
+                  .forEach((data, idx) => {
+                    setTimeout(() => {
+                      socket.current.emit("messages", { cid: data._id, mode: "after", cursorMid: data.lastReadMid });
+                    }, Math.floor(idx / 5) * 150);
+                  });
               }
             });
 
@@ -429,8 +460,38 @@ function ChatScreen(props) {
               socket.current.emit(event, payload);
               setTimeout(() => emitUntilAcked(event, payload, readyRef, attempt + 1), 1000 * Math.pow(1.5, attempt));
             };
-            emitUntilAcked("chats", { type: "upchats" }, chatsReadyRef);
+            // { [chatId]: updatedAt } for everything already cached locally,
+            // so the server can tell us "you're already current on this one"
+            // instead of sending back full docs for chats that haven't changed.
+            const buildKnownManifest = () => {
+              const known = {};
+              Object.values(chatCache.current.chats || {}).forEach((chat) => {
+                if (chat && chat._id && chat.updatedAt) known[chat._id] = chat.updatedAt;
+              });
+              return known;
+            };
+
+            emitUntilAcked("chats", { type: "sync", known: buildKnownManifest() }, chatsReadyRef);
             emitUntilAcked("contacts", {}, contactsReadyRef);
+
+            // Nothing previously re-synced on reconnect - any update pushed
+            // during a dropped connection was silently missed until a full
+            // page reload. Re-run the same manifest handshake whenever the
+            // socket comes back, plus a conservative periodic resync as a
+            // belt-and-suspenders for updates that can arrive even while the
+            // socket never truly disconnects.
+            socket.current.io.on("reconnect", () => {
+              emitUntilAcked("chats", { type: "sync", known: buildKnownManifest() }, { current: false });
+              socket.current.emit("contacts", {});
+              if (chatIDRef.current.id) {
+                const openMessages = Object.values(Messages[chatIDRef.current.id] || {});
+                const localMax = openMessages.length ? Math.max(...openMessages.map((m) => m.mid)) : null;
+                socket.current.emit("messages", { cid: chatIDRef.current.id, mode: localMax != null ? "after" : "before", cursorMid: localMax });
+              }
+            });
+            const resyncInterval = setInterval(() => {
+              socket.current.emit("chats", { type: "sync", known: buildKnownManifest() });
+            }, 5 * 60 * 1000);
             setChatdata(chatCache.current["chats"] || {});
           };
 

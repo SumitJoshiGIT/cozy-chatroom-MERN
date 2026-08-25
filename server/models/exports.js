@@ -4,6 +4,7 @@ const PermissionsModel=require('./Permissions');
 const SettingsModel=require('./Settings');
 const MessagesModel=require('./Messages');
 const ReportsModel=require('./Reports');
+const ReadPositionsModel=require('./ReadPositions');
 
 
-module.exports={ChatsModel,MessagesModel,UsersModel,PermissionsModel,SettingsModel,ReportsModel}
+module.exports={ChatsModel,MessagesModel,UsersModel,PermissionsModel,SettingsModel,ReportsModel,ReadPositionsModel}

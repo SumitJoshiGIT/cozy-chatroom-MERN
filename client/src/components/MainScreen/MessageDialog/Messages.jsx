@@ -39,6 +39,16 @@ export default function MessageDialog(props) {
     if (chatID.id) socket.current.emit("markSeen", { cid: chatID.id });
   }, [chatID.id, m]);
 
+  // Lazy load: only fetch a chat's history once it's actually opened, and
+  // only if we don't already have it - a chat with unread messages already
+  // got caught up eagerly via the sync-manifest handshake in AppScreen, so
+  // this effect only fires for a chat that's genuinely never been loaded on
+  // this device (first open, or a cleared local cache).
+  useEffect(() => {
+    if (!chatID.id || loadedChats.has(chatID.id)) return;
+    socket.current.emit("messages", { cid: chatID.id, mode: "before", cursorMid: null });
+  }, [chatID.id]);
+
   const messagesLoading = !!chatID.id && !loadedChats.has(chatID.id);
   const chat = chatdata[chatID.id] || {};
   const canPin = chat.type !== 'group' || (chat.admins||[]).includes(userID.current) || chat.owner===userID.current;
