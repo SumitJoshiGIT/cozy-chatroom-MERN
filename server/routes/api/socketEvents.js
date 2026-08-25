@@ -4,13 +4,14 @@ const ObjectID = require("mongoose").Types.ObjectId;
 const fs = require("fs");
 const path = require("path");
 const xss = require("xss");
+// SVG deliberately excluded: it's served same-origin via express.static, and
+// an uploaded SVG can embed <script> - a stored-XSS vector if it's ever
+// opened directly rather than rendered inside an <img> tag.
 const allowedTypes = {
   "image/png":"png",
   "image/jpeg":"jpg",
   "image/jpg":"jpg",
   "image/webp":"webp",
-  "image/svg":"svg",
-  "image/svg+xml":"svg",
 };
 const allowedDocTypes = {
   "application/pdf":"pdf",
@@ -58,6 +59,20 @@ async function saveUpload(base64, mimeType, name, size, extraTypes) {
   return { src, name, size, contentType: normalizedType };
 }
 async function onConnection(socket, io) {
+  // Every socket.on(...) handler below is async and mostly unguarded. On
+  // Node's current default, an unhandled rejection kills the whole process -
+  // not just this one request - taking down every connected user. Wrapping
+  // registration here (instead of every individual handler) means a single
+  // bad request just gets logged instead of crashing the server.
+  const rawSocketOn = socket.on.bind(socket);
+  socket.on = (event, handler) => rawSocketOn(event, async (...args) => {
+    try {
+      await handler(...args);
+    } catch (err) {
+      console.log(err);
+    }
+  });
+
   let profile = null;
   try {
     const tokenUserId = verifyToken(socket.handshake.auth && socket.handshake.auth.token);
@@ -394,7 +409,11 @@ async function onConnection(socket, io) {
       let success = null;
       console.log("delete")
       if (chatSet.has(cid)) {
-        success = await models.MessagesModel.findByIdAndDelete({
+        // findByIdAndDelete coerces its argument down to just _id, silently
+        // ignoring `chat` - that let any member of any chat delete any
+        // message anywhere by id. findOneAndDelete actually applies both
+        // filter fields.
+        success = await models.MessagesModel.findOneAndDelete({
           _id: (id),
           chat:(cid),
         });
@@ -529,23 +548,21 @@ async function onConnection(socket, io) {
                 changes.username = xss(stream.username);
                 profile.username = changes.username;
         }
-        if (stream.img && allowedTypes[stream.img.type]) {
-            const ext = allowedTypes[stream.img.type];
-            const buffer = Buffer.from(stream.file,'base64');
+        if (stream.img && stream.file) {
+            // Route through the shared saveUpload helper (same one used for
+            // chat photos/attachments) instead of duplicating the upload
+            // logic here - that duplicate had no size check and wrote to a
+            // fixed <id>.<ext> filename, so re-uploading a same-type avatar
+            // produced the exact same URL and the browser never re-fetched it.
             const oldSrc = profile.img && profile.img.src;
-            const content = {
-              src: `${profile._id}.${ext}`,
-              name: stream.img.name,
-              size: stream.img.size,
-              contentType: stream.img.type,
-            };
-
-            await fs.promises.writeFile(path.join(process.cwd(), "public", content.src), buffer);
-            if (oldSrc && oldSrc !== content.src) {
-              fs.promises.unlink(path.join(process.cwd(), "public", oldSrc)).catch(() => {});
+            const saved = await saveUpload(stream.file, stream.img.type, stream.img.name, stream.img.size);
+            if (saved) {
+              if (oldSrc && oldSrc !== saved.src) {
+                fs.promises.unlink(path.join(process.cwd(), "public", oldSrc)).catch(() => {});
+              }
+              profile.img = saved;
+              changes.img = saved;
             }
-            profile.img=content;
-            changes.img=content;
         }
         await profile.save();
         changes._id=profile._id;

@@ -3,7 +3,8 @@ import edit from '/edit.svg'
 import { useToast } from "../ui/Toast";
 import Spinner from "../ui/Spinner";
 const maxSize=2*1024*1024;
-const validImageTypes = ['image/jpeg', 'image/png', 'image/webp','image/svg','image/svg+xml'];
+// SVG intentionally excluded - see allowedTypes in server/routes/api/socketEvents.js.
+const validImageTypes = ['image/jpeg', 'image/png', 'image/webp'];
 export default function(props){
     const [src,setSrc]=useState(props.src);
     const [reading,setReading]=useState(false);

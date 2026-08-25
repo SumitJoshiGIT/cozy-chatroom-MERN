@@ -23,6 +23,14 @@ if (!process.env.SESSION_SECRET) {
   console.warn('SESSION_SECRET not set, using an insecure development default');
 }
 
+// Backstop: on current Node, an unhandled rejection anywhere kills the whole
+// process by default. Socket handlers already guard against this at the
+// registration point (see socketEvents.js), but this catches anything else
+// (route handlers, startup code, a future forgotten handler) instead of
+// silently taking down every connected user.
+process.on('unhandledRejection', (err) => console.error('Unhandled rejection:', err));
+process.on('uncaughtException', (err) => console.error('Uncaught exception:', err));
+
 const app = express();
 if (isProduction) app.set('trust proxy', 1);
 const server = createServer(app);

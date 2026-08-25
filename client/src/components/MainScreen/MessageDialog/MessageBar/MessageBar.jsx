@@ -12,7 +12,8 @@ import EmojiPicker from "./EmojiPicker";
 import LocationPicker from "./LocationPicker";
 import AttachMenu from "./AttachMenu";
 const maxSize = 2*1024*1024;
-const imageTypes = ['image/jpeg','image/png','image/jpg','image/webp','image/svg','image/svg+xml'];
+// SVG intentionally excluded - see allowedTypes in server/routes/api/socketEvents.js.
+const imageTypes = ['image/jpeg','image/png','image/jpg','image/webp'];
 const videoTypes = ['video/mp4','video/webm','video/ogg','video/quicktime'];
 const audioTypes = ['audio/mpeg','audio/mp4','audio/wav','audio/webm','audio/ogg'];
 const docTypes = [
@@ -26,7 +27,7 @@ const docTypes = [
 ];
 const acceptedTypes = [...imageTypes, ...videoTypes, ...audioTypes, ...docTypes];
 const MessageBar = React.memo((props) => {
-  const { setMessages, db, scrollable, profiles, userID, chatID, socket, emitTyping, chatdata, blocked, toggleBlock }=useCtx();
+  const { setMessages, db, scrollable, userID, chatID, socket, emitTyping, chatdata, blocked, toggleBlock }=useCtx();
   const toast=useToast();
   const chat = chatdata[chatID.id] || {};
   const blockedOther = chat.type !== 'group' && chat.sender && blocked.has(chat.sender);
@@ -34,10 +35,6 @@ const MessageBar = React.memo((props) => {
   const [message, setMessage] = useState("");
   const ref = useRef(null);
   const lastTypingEmit = useRef(0);
-  let [user, setUser] = useState(profiles[userID.current]);
-  useEffect(() => {
-    setUser(profiles[userID.current]);
-  }, [profiles]);
   const filesRef = useRef(null);
   const [files, setFiles] = useState([]);
   const [recording, setRecording] = useState(false);
@@ -340,7 +337,7 @@ const MessageBar = React.memo((props) => {
             className="text-sm font-semibold text-[var(--accent-dark)] shrink-0"
           >Unblock</button>
         </div>
-      ) : user &&(chatID.type=='user'||user.Chats.includes(chatID.id))? (
+      ) : (chatID.type=='user'||(Array.isArray(chat.users)&&chat.users.includes(userID.current)))? (
         recording ? (
         <div className="p-1.5 rounded-3xl shadow-md bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 w-full flex items-center gap-2 px-4 py-2.5">
           <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
