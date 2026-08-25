@@ -55,7 +55,23 @@ async function saveUpload(base64, mimeType, name, size, extraTypes) {
   if (buffer.length > maxUploadSize) return null;
   const ext = allowList[normalizedType];
   const src = `${Date.now()}-${Math.round(Math.random()*1e9)}.${ext}`;
-  await fs.promises.writeFile(path.join(process.cwd(), "public", src), buffer);
+  const dir = path.join(process.cwd(), "public");
+  try {
+    // mkdir guards against the dir not existing (e.g. a fresh deploy target -
+    // deploy-server.yml deliberately excludes public/ from rsync so uploaded
+    // files survive redeploys, which also means nothing else ever creates
+    // this directory). A write failure here used to throw uncaught out of
+    // every caller (SendMessage, updateProfile, updateChat) - since none of
+    // them wrap this call in try/catch, that silently killed the whole
+    // handler before it reached newMessage.save()/profile.save(), so the
+    // message stayed stuck pending forever and profile/chat photo edits
+    // never applied, with no error surfaced anywhere.
+    await fs.promises.mkdir(dir, { recursive: true });
+    await fs.promises.writeFile(path.join(dir, src), buffer);
+  } catch (err) {
+    console.error('saveUpload: failed to write file', err);
+    return null;
+  }
   return { src, name, size, contentType: normalizedType };
 }
 
