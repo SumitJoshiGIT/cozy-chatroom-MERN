@@ -38,7 +38,6 @@ export default function (props) {
 },[profiles[chat.sender]])
 
   const onClick = (event) => {
-    if(window.innerWidth<600)props.setStyle(1)
     setMessageDialog(0);
     setChatID((prev) => {
       return { id: chat._id, type: chat.type };

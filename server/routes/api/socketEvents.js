@@ -662,8 +662,16 @@ async function onConnection(socket, io) {
         }
         await profile.save();
         changes._id=profile._id;
+        changes.updatedAt=profile.updatedAt;
         socket.emit("profile",profile);
-        chatSet.forEach((x) => io.to(x).emit("profile",changes));
+        // socket.to (not io.to): the caller's own socket is already a member
+        // of every one of their own chat rooms, so io.to would additionally
+        // deliver this same update back to them once per shared chat on top
+        // of the direct emit above - up to several redundant, out-of-order
+        // "profile" events for their own avatar change, one of which lacked
+        // updatedAt and produced a broken (NaN-timestamped) cache-busted URL
+        // depending on which one the client processed last.
+        chatSet.forEach((x) => socket.to(x).emit("profile",changes));
     });
 
     function isChatAdmin(chat){

@@ -9,7 +9,6 @@ import edit from "/edit.svg";
 import close from "/close.svg";
 import fileIcon from "/files.svg";
 import EmojiPicker from "./EmojiPicker";
-import LocationPicker from "./LocationPicker";
 import AttachMenu from "./AttachMenu";
 const maxSize = 2*1024*1024;
 // SVG intentionally excluded - see allowedTypes in server/routes/api/socketEvents.js.
@@ -377,9 +376,10 @@ const MessageBar = React.memo((props) => {
               filesRef.current.accept = accept;
               filesRef.current.click();
             }}
+            onSendLocation={sendLocation}
+            sharingLiveLocation={sharingLiveLocation}
           />
           <EmojiPicker onPick={insertEmoji} />
-          <LocationPicker onSend={sendLocation} sharing={sharingLiveLocation} />
           <textarea
             rows="1"
             onKeyDown={(event) => {

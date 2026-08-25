@@ -8,12 +8,13 @@ import bell from '/bell.svg'
 import report from '/report.svg'
 import leave from '/leave.svg'
 import del from '/delete.svg'
+import back from '/back-one.svg'
 import { WALLPAPERS } from '../../../../wallpaper'
 
 
 export default function (props){
 
-    const {chatID,db,chatdata,socket,profiles,userID,typingUsers,report:reportFn,deleteChat}=useCtx()
+    const {chatID,setChatID,db,chatdata,socket,profiles,userID,typingUsers,report:reportFn,deleteChat,isMobile}=useCtx()
     let chat=(chatdata)&&chatdata[chatID.id]||{};
     const [showWallpaper,setShowWallpaper]=useState(false);
     const [confirmDelete,setConfirmDelete]=useState(false);
@@ -79,7 +80,15 @@ export default function (props){
       <div className="w-full  rounded-t-xl ">
       <div className="  w-full shadow-sm  border-b dark:border-gray-700  p-2   pl-4 justify-between items-center  h-14 bg-white dark:bg-gray-800 flex">
           
-        <div className="flex"> 
+        <div className="flex items-center">
+         {isMobile && (
+           <IconButton
+             icon={back}
+             alt="Back to chats"
+             className="mr-1"
+             onClick={()=>{setChatID({id:null,type:null})}}
+           />
+         )}
          <button onClick={()=>{
           props.setDialog(1);}} className="outline-none  border-none rounded-full h-fit w-fit">
            <Avatar src={chat.img && chat.img.src} kind={chat.type=='group'?'group':'user'} size="sm" />

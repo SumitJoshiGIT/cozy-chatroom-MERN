@@ -36,6 +36,15 @@ function ChatScreen(props) {
   const chatsReadyRef = useRef(false);
   const contactsReadyRef = useRef(false);
   const typingTimers = useRef({});
+  // Below this width the chat list and the open conversation are two
+  // separate full-screen views (one at a time) instead of a side-by-side
+  // split - matches Tailwind's `md` breakpoint, already used elsewhere.
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const navigate = useNavigate();
   const userID = useRef(null);
@@ -332,11 +341,12 @@ function ChatScreen(props) {
 
             socket.current.on("profile", async (data) => {
               if (data) {
-                // Cache-bust: the server always writes an avatar to the same
-                // filename (<id>.<ext>), so re-uploading one keeps the exact
-                // same URL - without a query param the browser never
-                // re-fetches it and the old image just stays on screen.
-                if (data.img) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
+                // Cache-bust (and guard against re-prefixing an already-
+                // processed payload - a chat member can receive duplicate
+                // "profile" broadcasts, e.g. if they share more than one
+                // chat with the updated user, and re-running this on an
+                // already-prefixed URL corrupts it into a broken nested one).
+                if (data.img && !data.img.src.startsWith(apiOrigin)) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
                 setProfiles((prev) => {
                   const obj = { ...prev };
                   obj[data._id] = { ...(obj[data._id] || {}), ...data };
@@ -358,8 +368,8 @@ function ChatScreen(props) {
               await Promise.all(
                 (chatsList || []).map(async (data) => {
                   try {
-                    // See the "profile" handler above for why this needs cache-busting.
-                    if (data.img) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
+                    // See the "profile" handler above for why this needs cache-busting and the already-prefixed guard.
+                    if (data.img && !data.img.src.startsWith(apiOrigin)) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
                     if (data.type == "private") {
                       data.users.forEach((uid) => {
                         if (uid != userID.current) {
@@ -512,8 +522,8 @@ function ChatScreen(props) {
       socket.current.on("auth", async (data) => {
         user = { ...user, ...data };
         if (data) {
-          // See the "profile" handler above for why this needs cache-busting.
-          if (data.img) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
+          // See the "profile" handler above for why this needs cache-busting and the already-prefixed guard.
+          if (data.img && !data.img.src.startsWith(apiOrigin)) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
           if (data.blocked) setBlocked(new Set(data.blocked.map(String)));
           db.transaction("meta", "readwrite")
             .objectStore("meta")
@@ -582,11 +592,17 @@ function ChatScreen(props) {
         unpinMessage: (id, cid) => socket.current.emit("unpinMessage", { id, cid }),
         reactMessage: (id, cid, emoji) => socket.current.emit("reactMessage", { id, cid, emoji }),
         deleteChat: (id) => socket.current.emit("deleteChat", { id }),
+        isMobile,
       }}
     >
+      {/* MessageDialog isn't just an open chat - Settings/UserInfo/AddGroup/
+          StarredMessages all route through it too via messageDialog !== 0,
+          with no chat ever selected. Gating visibility on chatID.id alone
+          would hide it (and leave nothing shown) whenever one of those was
+          opened from the sidebar on mobile. */}
       <div className="h-screen w-screen flex flex-row overflow-hidden">
-        <ChatDialog />
-        <MessageDialog />
+        {(!isMobile || (!chatID.id && messageDialog === 0)) && <ChatDialog />}
+        {(!isMobile || chatID.id || messageDialog !== 0) && <MessageDialog />}
       </div>
     </Context.Provider>
   );
