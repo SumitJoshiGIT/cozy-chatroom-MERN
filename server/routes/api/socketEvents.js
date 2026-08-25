@@ -775,15 +775,25 @@ async function onConnection(socket, io) {
             users: [...new Set([profile._id, user._id])],
             type: "private",
           });
-          const chat = await data.save();
-          chatSet.add(chat._id.toString());
-          profile.Chats.push(chat._id);
-          profile.contacts.push(user._id);
-          user.contacts.push(profile._id);
-          await profile.save();
-          await user.save();
-          chat.sender = stream.cid;
+          await data.save();
         }
+        // Add this chat to BOTH sides' Chats array unconditionally, not just
+        // inside the "just created" branch above. Previously only the
+        // caller's own profile.Chats got the push, so the *other* party -
+        // the recipient of a first-ever DM - never had this chat in their
+        // own Chats array, which is what onConnection uses to build chatSet
+        // and join rooms. They'd never see the chat at all, and since this
+        // whole branch is skipped once the chat already exists, trying to
+        // message back didn't fix it either - $addToSet here is idempotent
+        // so it's safe to run on every call, new chat or not.
+        chatSet.add(data._id.toString());
+        await models.UsersModel.findByIdAndUpdate(profile._id, {
+          $addToSet: { Chats: data._id, contacts: user._id },
+        });
+        await models.UsersModel.findByIdAndUpdate(user._id, {
+          $addToSet: { Chats: data._id, contacts: profile._id },
+        });
+        data.sender = stream.cid;
         socket.join(data._id.toString());
         socket.emit(`private.${stream.cid}`,data);
         // A file-only first message (no text) has falsy stream.content -
