@@ -51,6 +51,15 @@ const Chats=new mongoose.Schema
     ref:'Permissions',
     type:mongoose.Schema.Types.ObjectId
    },
+   // Seconds a new message in this chat lives before auto-deleting, or null
+   // when off. Applied at send time (SendMessage stamps each new message's
+   // own expiresAt) - changing this never retroactively touches messages
+   // already sent, matching how every mainstream chat app's version of this
+   // feature works.
+   disappearingDuration:{
+    default:null,
+    type:Number,
+   },
    // Denormalized so the chat list can show a preview and the sync manifest
    // can tell a chat changed without ever loading its message history.
    lastMessage:{

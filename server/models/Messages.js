@@ -57,11 +57,28 @@ const Messages=new mongoose.Schema
         },{_id:false})],
         default:[],
     },
+    // Disappearing messages: set at send time from the parent chat's
+    // disappearingDuration (see Chats.js). Not the same field as
+    // location.expiresAt above, which just marks when *live location
+    // sharing* stops, not message deletion.
+    expiresAt:{
+        type:Date,
+        default:null,
+    },
 
 },
    {timestamps:true}
 )
 
+// A TTL index - MongoDB's own background task removes a document once the
+// current time passes its expiresAt value (expireAfterSeconds:0 means "at
+// the timestamp itself", not offset from it). A null expiresAt (the default,
+// for chats without disappearing messages on) is never indexed by a TTL
+// index, so this is a no-op for every message until a chat turns the
+// feature on. Actual removal can lag up to ~60s behind the timestamp -
+// clients hide an expired message immediately client-side regardless (see
+// Messages.jsx), this index is just what reclaims the DB record/storage.
+Messages.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 Messages.index({content:'text'})
 Messages.plugin(AutoIncrement, { inc_field: 'mid', start_seq: 0 });
 

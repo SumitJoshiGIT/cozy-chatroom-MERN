@@ -144,6 +144,32 @@ export default function MessageDialog(props) {
     if (chatID.id) socket.current.emit("markSeen", { cid: chatID.id });
   }, [chatID.id, m]);
 
+  // Disappearing messages: the server's Mongo TTL index eventually reclaims
+  // the DB record (up to ~60s after expiresAt), but a client that already
+  // has the message loaded needs to independently notice it's expired and
+  // drop it from view - nothing pushes a "this expired" event. Re-checks
+  // periodically (not just on mount) so a message visible right now actually
+  // disappears in real time instead of only on the next reload/re-render.
+  useEffect(() => {
+    const sweep = () => {
+      if (!m) return;
+      const now = Date.now();
+      const expired = Object.values(m).filter((msg) => msg.expiresAt && new Date(msg.expiresAt).getTime() <= now);
+      if (expired.length === 0) return;
+      setMessages((prev) => {
+        const chatStore = { ...(prev[chatID.id] || {}) };
+        expired.forEach((msg) => delete chatStore[msg.mid]);
+        return { ...prev, [chatID.id]: chatStore };
+      });
+      if (db) {
+        expired.forEach((msg) => db.transaction("messages", "readwrite").objectStore("messages").delete(msg._id));
+      }
+    };
+    sweep();
+    const interval = setInterval(sweep, 15000);
+    return () => clearInterval(interval);
+  }, [m, chatID.id, db, setMessages]);
+
   // Retries a jumpToMatch() that found its target not yet loaded, once the
   // "before" fetch it triggered lands here.
   useEffect(() => {

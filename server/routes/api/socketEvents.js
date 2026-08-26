@@ -169,6 +169,9 @@ async function onConnection(socket, io) {
           reply_to:(message.reply_to),
           status:"✔",
           attachments,
+          expiresAt: parentChat && parentChat.disappearingDuration
+            ? new Date(Date.now() + parentChat.disappearingDuration * 1000)
+            : null,
         });
         try {
           await newMessage.save();
@@ -267,6 +270,9 @@ async function onConnection(socket, io) {
             live,
             expiresAt: live ? new Date(Date.now() + (durationMs || 15 * 60 * 1000)) : null,
           },
+          expiresAt: parentChat.disappearingDuration
+            ? new Date(Date.now() + parentChat.disappearingDuration * 1000)
+            : null,
         });
         await newMessage.save();
         await updateLastMessage(stream.cid, newMessage);
@@ -812,6 +818,17 @@ async function onConnection(socket, io) {
       }
       await chat.save();
       io.to(chat._id.toString()).emit("chat",{type:"chats",chats:[chat]});
+    });
+
+    // Disappearing messages: duration in seconds, or null/0 to turn off.
+    // Only affects messages sent after this is set - see SendMessage.
+    const DISAPPEARING_DURATIONS = [24 * 60 * 60, 7 * 24 * 60 * 60, 90 * 24 * 60 * 60];
+    socket.on("setDisappearing", async ({ cid, duration }) => {
+      const chat = await models.ChatsModel.findById(cid);
+      if (!chat || !chatSet.has(cid) || (chat.type === "group" && !(await canPerform(chat, "editInfo")))) return;
+      chat.disappearingDuration = duration && DISAPPEARING_DURATIONS.includes(duration) ? duration : null;
+      await chat.save();
+      io.to(chat._id.toString()).emit("chat", { type: "chats", chats: [chat] });
     });
 
     socket.on("removeUser", async ({chatID, userID: targetId}) => {

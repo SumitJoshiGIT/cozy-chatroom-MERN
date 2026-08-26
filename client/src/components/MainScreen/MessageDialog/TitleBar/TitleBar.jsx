@@ -23,6 +23,7 @@ export default function (props){
     const {chatID,setChatID,db,chatdata,socket,profiles,userID,typingUsers,report:reportFn,deleteChat,isMobile}=useCtx()
     let chat=(chatdata)&&chatdata[chatID.id]||{};
     const [showWallpaper,setShowWallpaper]=useState(false);
+    const [showDisappearing,setShowDisappearing]=useState(false);
     const [confirmDelete,setConfirmDelete]=useState(false);
     const [selMenuOpen,setSelMenuOpen]=useState(false);
     const option=useRef();
@@ -63,6 +64,19 @@ export default function (props){
     const muteChat=()=>{
       socket.current.emit('muteChat',chatID.id);
     }
+    const DISAPPEARING_OPTIONS = [
+      { label: 'Off', value: 0 },
+      { label: '24 hours', value: 86400 },
+      { label: '7 days', value: 604800 },
+      { label: '90 days', value: 7776000 },
+    ];
+    const setDisappearing = (value) => {
+      socket.current.emit('setDisappearing', { cid: chatID.id, duration: value || null });
+      setShowDisappearing(false);
+    };
+    const disappearingLabel = (seconds) =>
+      (DISAPPEARING_OPTIONS.find((o) => o.value === seconds) || {}).label
+      || (seconds ? `${Math.round(seconds / 86400)}d` : null);
     const deleteGroupChat=(e)=>{
       if(!confirmDelete){
         e.stopPropagation();
@@ -166,7 +180,14 @@ export default function (props){
          </button>
         <div className="p-2 pt-1 flex flex-col ">
          <div className="text-sm w-36 text-ellipses font-semibold text-gray-800 dark:text-gray-100">{chat.name||"Unnamed"}</div>
-         <div className={`text-xs ${typingStatus ? 'text-[var(--accent-dark)] italic' : 'text-gray-400'}`}>{status}
+         <div className={`text-xs flex items-center gap-1 ${typingStatus ? 'text-[var(--accent-dark)] italic' : 'text-gray-400'}`}>
+           <span>{status}</span>
+           {!typingStatus && chat.disappearingDuration > 0 && (
+             <span className="flex items-center gap-0.5 shrink-0" title={`Disappearing messages: ${disappearingLabel(chat.disappearingDuration)}`}>
+               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>
+               {disappearingLabel(chat.disappearingDuration)}
+             </span>
+           )}
          </div>
         </div>
         </div>
@@ -198,6 +219,9 @@ export default function (props){
               <img src={bell}  className="w-4 h-4 dark:invert dark:opacity-80"></img><div>Mute</div></button>
               <button onClick={(e)=>{e.stopPropagation();setShowWallpaper((v)=>!v);}}  className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-700">
               <span className="w-4 h-4 flex items-center justify-center">🖼</span><div>Wallpaper</div></button>
+              <button onClick={(e)=>{e.stopPropagation();setShowDisappearing((v)=>!v);}}  className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-70 shrink-0"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>
+              <div>Disappearing messages</div></button>
               <button onClick={reportChat}  className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-700">
               <img src={report}  className="w-4 h-4 dark:invert dark:opacity-80"></img><div>Report</div></button>
               <button onClick={leaveChat} className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-700">
@@ -221,6 +245,24 @@ export default function (props){
             className={`h-12 rounded-md border-2 ${ (props.wallpaper||null)===w.css ? 'border-[var(--accent)]' : 'border-transparent'}`}
             style={{ background: w.css || `url(/background.jpg) center/cover` }}
           />
+        ))}
+      </div>
+    )}
+    {showDisappearing && (
+      <div
+        onMouseLeave={()=>setShowDisappearing(false)}
+        className="p-1 mt-1 w-44 h-fit z-20 bg-white dark:bg-gray-800 rounded-lg shadow-lg fixed right-12 text-sm text-gray-600 dark:text-gray-200"
+      >
+        {DISAPPEARING_OPTIONS.map((o) => (
+          <button
+            key={o.value}
+            onClick={() => setDisappearing(o.value)}
+            className={`rounded-lg px-2 py-1.5 flex items-center justify-between w-full hover:bg-gray-100 dark:hover:bg-gray-700 ${
+              (chat.disappearingDuration || 0) === o.value ? 'text-[var(--accent-dark)] font-semibold' : ''
+            }`}
+          >
+            {o.label}
+          </button>
         ))}
       </div>
     )}
