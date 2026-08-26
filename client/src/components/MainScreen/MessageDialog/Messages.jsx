@@ -12,17 +12,36 @@ import { useCtx } from "../AppScreen";
 import TitleBar from "./TitleBar/TitleBar";
 import background from "/background.jpg";
 import icon from "/icon.svg";
+import pinIcon from "/pin.svg";
 import { getWallpaper, setWallpaperFor } from "../../../wallpaper";
 import Spinner from "../../ui/Spinner";
 export default function MessageDialog(props) {
-  const { Messages, chatID, scrollable, socket, chatdata, userID, unpinMessage, loadedChats } = useCtx();
+  const { Messages, chatID, scrollable, socket, chatdata, userID, profiles, unpinMessage, loadedChats } = useCtx();
+  const [pinIndex, setPinIndex] = useState(0);
   const [reply, setReply] = useState();
   const [edit, setEdit] = useState();
   const [forward, setForward] = useState();
   const [wallpaper, setWallpaper] = useState(() => getWallpaper(chatID.id));
+  // Selection mode - the right-click menu's alternative for touch (long-
+  // press) and mouse (a hover checkbox) alike. Lives here, not in Message
+  // itself, since the TitleBar needs to react to it too.
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const selectionMode = selectedIds.size > 0;
+
+  const cancelSelection = useCallback(() => setSelectedIds(new Set()), []);
+  const enterSelection = useCallback((id) => setSelectedIds(new Set([id])), []);
+  const toggleSelect = useCallback((id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     setWallpaper(getWallpaper(chatID.id));
+    cancelSelection();
+    setPinIndex(0);
   }, [chatID.id]);
 
   const onScroll = useCallback(
@@ -65,8 +84,45 @@ export default function MessageDialog(props) {
     return byId;
   }, [m]);
 
+  const selectedMessages = useMemo(
+    () => Array.from(selectedIds).map((id) => messagesById[id]).filter(Boolean),
+    [selectedIds, messagesById]
+  );
+
+  const deleteSelected = useCallback(() => {
+    selectedMessages.forEach((message) => {
+      socket.current.emit("deleteMessage", [message.mid, message._id, message.chat]);
+    });
+    cancelSelection();
+  }, [selectedMessages, socket, cancelSelection]);
+
+  const copySelected = useCallback(() => {
+    const text = selectedMessages.map((message) => message.content).filter(Boolean).join("\n");
+    if (text) navigator.clipboard.writeText(text);
+    cancelSelection();
+  }, [selectedMessages, cancelSelection]);
+
+  const forwardSelected = useCallback(() => {
+    setForward(selectedMessages);
+    cancelSelection();
+  }, [selectedMessages, cancelSelection]);
+
   const pinnedIds = chat.pinned || [];
-  const latestPinned = pinnedIds.length ? messagesById[pinnedIds[pinnedIds.length - 1]] : null;
+  const activePinIndex = pinnedIds.length ? Math.min(pinIndex, pinnedIds.length - 1) : 0;
+  const activePinned = pinnedIds.length ? messagesById[pinnedIds[activePinIndex]] : null;
+  const pinnedPreview = (message) => {
+    if (!message) return "Pinned message";
+    if (message.content) return message.content;
+    if (message.location) return "📍 Location";
+    const a = message.attachments && message.attachments[0];
+    if (a) {
+      if ((a.contentType || "").startsWith("image/")) return "📷 Photo";
+      if ((a.contentType || "").startsWith("video/")) return "🎥 Video";
+      if ((a.contentType || "").startsWith("audio/")) return "🎤 Voice message";
+      return `📎 ${a.name || "File"}`;
+    }
+    return "Pinned message";
+  };
 
   const dayLabel = (date) => {
     const now = new Date();
@@ -112,6 +168,10 @@ export default function MessageDialog(props) {
           reply_to={message.reply_to}
           reply_data={messagesById[message.reply_to]}
           pre={pre}
+          selectionMode={selectionMode}
+          selected={selectedIds.has(message._id)}
+          onEnterSelection={enterSelection}
+          onToggleSelect={toggleSelect}
         />
       );
       pre = message.uid;
@@ -131,24 +191,46 @@ export default function MessageDialog(props) {
             setWallpaperFor(chatID.id, css);
             setWallpaper(css);
           }}
+          selectionMode={selectionMode}
+          selectedCount={selectedIds.size}
+          onCancelSelection={cancelSelection}
+          onForwardSelected={forwardSelected}
+          onDeleteSelected={deleteSelected}
+          onCopySelected={copySelected}
+          canCopySelected={selectedMessages.length === 1 && !!selectedMessages[0].content}
         />
       )}
-      {chatID.id && latestPinned && (
-        <div className="w-full px-4 py-1.5 bg-white/90 dark:bg-gray-800/90 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2 text-xs">
-          <span>📌</span>
+      {chatID.id && activePinned && (
+        <div className="w-full px-3 py-1.5 bg-white/90 dark:bg-gray-800/90 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2 text-xs">
+          <img src={pinIcon} alt="" className="w-3.5 h-3.5 opacity-60 dark:invert shrink-0" />
+          {pinnedIds.length > 1 && (
+            <button
+              onClick={() => setPinIndex((activePinIndex - 1 + pinnedIds.length) % pinnedIds.length)}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
+            >‹</button>
+          )}
           <div
             onClick={() => {
-              const element = document.getElementById(latestPinned._id);
+              const element = document.getElementById(activePinned._id);
               if (element) element.scrollIntoView({ block: "center" });
             }}
-            className="flex-1 min-w-0 truncate cursor-pointer text-gray-600 dark:text-gray-300"
+            className="flex-1 min-w-0 cursor-pointer"
           >
-            {latestPinned.content || "Pinned message"}
-            {pinnedIds.length > 1 && <span className="text-gray-400"> · +{pinnedIds.length - 1} more pinned</span>}
+            <div className="text-[var(--accent-dark)] dark:text-[var(--accent)] font-semibold truncate">
+              {(profiles[activePinned.uid] && profiles[activePinned.uid].name) || "Pinned"}
+              {pinnedIds.length > 1 && <span className="text-gray-400 font-normal"> · {activePinIndex + 1}/{pinnedIds.length}</span>}
+            </div>
+            <div className="truncate text-gray-600 dark:text-gray-300">{pinnedPreview(activePinned)}</div>
           </div>
+          {pinnedIds.length > 1 && (
+            <button
+              onClick={() => setPinIndex((activePinIndex + 1) % pinnedIds.length)}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
+            >›</button>
+          )}
           {canPin && (
             <button
-              onClick={() => unpinMessage(latestPinned._id, chatID.id)}
+              onClick={() => unpinMessage(activePinned._id, chatID.id)}
               className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
             >✕</button>
           )}
@@ -183,7 +265,7 @@ export default function MessageDialog(props) {
           setEdit={setEdit}
         />
       )}
-      {forward && <ForwardDialog item={forward} onClose={() => setForward()} />}
+      {forward && <ForwardDialog items={forward} onClose={() => setForward()} />}
     </div>
   );
 }

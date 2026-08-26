@@ -8,6 +8,7 @@ export default function (props) {
     chatID,
     socket,db,
     profiles,
+    requestProfile,
     chatdata,
     chatCache,
     setChatdata,
@@ -33,7 +34,7 @@ export default function (props) {
         return { ...prev, [chat._id]: chat };
       });
     }
-    else socket.current.emit("getProfile", { uid: chat.sender });
+    else requestProfile(chat.sender);
   }
 },[profiles[chat.sender]])
 

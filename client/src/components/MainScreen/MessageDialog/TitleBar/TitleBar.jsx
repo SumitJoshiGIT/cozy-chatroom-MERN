@@ -9,6 +9,9 @@ import report from '/report.svg'
 import leave from '/leave.svg'
 import del from '/delete.svg'
 import back from '/back-one.svg'
+import close from '/close.svg'
+import forwardIcon from '/forward.svg'
+import copyIcon from '/copy.svg'
 import { WALLPAPERS } from '../../../../wallpaper'
 
 
@@ -18,6 +21,7 @@ export default function (props){
     let chat=(chatdata)&&chatdata[chatID.id]||{};
     const [showWallpaper,setShowWallpaper]=useState(false);
     const [confirmDelete,setConfirmDelete]=useState(false);
+    const [selMenuOpen,setSelMenuOpen]=useState(false);
     const option=useRef();
     const isOwner = chat.type==='group' && chat.owner && userID.current===chat.owner;
     // Membership must come from the chat doc's own `users` list, not the
@@ -76,10 +80,51 @@ export default function (props){
         const t=setTimeout(()=>setConfirmDelete(false),4000);
         return ()=>clearTimeout(t);
     },[confirmDelete])
-   return( 
+   return(
       <div className="w-full  rounded-t-xl ">
+      {props.selectionMode ? (
+      <div className="w-full shadow-sm border-b dark:border-gray-700 p-2 pl-4 justify-between items-center h-14 bg-white dark:bg-gray-800 flex">
+        <div className="flex items-center gap-3">
+          <IconButton icon={close} alt="Cancel selection" onClick={props.onCancelSelection} />
+          <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">{props.selectedCount} selected</div>
+        </div>
+        <div className="relative flex items-center">
+          <IconButton icon={options} alt="Selection actions" onClick={() => setSelMenuOpen((v) => !v)} />
+          {selMenuOpen && (
+            <div
+              onMouseLeave={() => setSelMenuOpen(false)}
+              className="absolute right-0 top-11 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg z-20 p-1 text-sm text-gray-600 dark:text-gray-200"
+            >
+              <button
+                onClick={() => { props.onForwardSelected(); setSelMenuOpen(false); }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <img src={forwardIcon} className="w-4 h-4 dark:invert dark:opacity-80" alt="" />
+                <span>Forward</span>
+              </button>
+              {props.canCopySelected && (
+                <button
+                  onClick={() => { props.onCopySelected(); setSelMenuOpen(false); }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  <img src={copyIcon} className="w-4 h-4 dark:invert dark:opacity-80" alt="" />
+                  <span>Copy</span>
+                </button>
+              )}
+              <button
+                onClick={() => { props.onDeleteSelected(); setSelMenuOpen(false); }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500"
+              >
+                <img src={del} className="w-4 h-4" alt="" />
+                <span>Delete</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      ) : (
       <div className="  w-full shadow-sm  border-b dark:border-gray-700  p-2   pl-4 justify-between items-center  h-14 bg-white dark:bg-gray-800 flex">
-          
+
         <div className="flex items-center">
          {isMobile && (
            <IconButton
@@ -110,7 +155,8 @@ export default function (props){
 
         </div>
     </div>
-   
+      )}
+
     <div ref={option} onClick={((event)=>{
           option.current.classList.toggle('hidden');
           option.current.removeEventListener('mouseLeave',(event)=>{

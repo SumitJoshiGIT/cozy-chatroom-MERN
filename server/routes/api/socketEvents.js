@@ -442,6 +442,9 @@ async function onConnection(socket, io) {
     socket.on("pinMessage", async ({ id, cid }) => {
       const chat = await models.ChatsModel.findById(cid);
       if (!chat || !chatSet.has(cid) || (chat.type === "group" && !(await canPerform(chat, "pinMessages")))) return;
+      // Mirrors the client-side check in Message.jsx's pinHandle - enforced
+      // here too since the client is not a trust boundary.
+      if (chat.pinned.length >= 6 && !chat.pinned.some((p) => p.toString() === id.toString())) return;
       if (!chat.pinned.some((p) => p.toString() === id.toString())) {
         chat.pinned.push(id);
         await chat.save();

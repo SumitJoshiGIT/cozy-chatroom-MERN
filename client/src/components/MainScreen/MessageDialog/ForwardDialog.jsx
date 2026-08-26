@@ -5,11 +5,11 @@ import Button from "../../ui/Button";
 import Avatar from "../../ui/Avatar";
 import close from "/close.svg";
 
-export default function ForwardDialog({ item, onClose }) {
+export default function ForwardDialog({ items, onClose }) {
   const { chatdata, socket, userID } = useCtx();
   const [selected, setSelected] = useState(null);
   const [sent, setSent] = useState(false);
-  const message = item[0];
+  const messages = items.filter((m) => m && m.content);
 
   const chats = useMemo(
     () => Object.values(chatdata || {}).filter((c) => c && c._id),
@@ -17,10 +17,12 @@ export default function ForwardDialog({ item, onClose }) {
   );
 
   const forward = () => {
-    if (!selected || !message.content) return;
-    socket.current.emit("sendMessage", {
-      cid: selected,
-      content: message.content,
+    if (!selected || messages.length === 0) return;
+    messages.forEach((message) => {
+      socket.current.emit("sendMessage", {
+        cid: selected,
+        content: message.content,
+      });
     });
     setSent(true);
     setTimeout(onClose, 500);
@@ -36,7 +38,7 @@ export default function ForwardDialog({ item, onClose }) {
           </button>
         </div>
         <div className="text-xs text-gray-400 mb-2 truncate">
-          "{message.content}"
+          {messages.length === 1 ? `"${messages[0].content}"` : `${messages.length} messages selected`}
         </div>
         <div className="flex-1 overflow-y-auto flex flex-col gap-1">
           {chats.map((c) => (
@@ -53,7 +55,7 @@ export default function ForwardDialog({ item, onClose }) {
         <Button
           variant="primary"
           className="mt-3 w-full"
-          disabled={!selected || sent}
+          disabled={!selected || sent || messages.length === 0}
           onClick={forward}
         >
           {sent ? "Sent" : "Forward"}

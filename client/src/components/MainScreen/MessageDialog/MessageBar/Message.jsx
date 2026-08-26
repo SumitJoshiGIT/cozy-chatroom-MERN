@@ -9,6 +9,8 @@ import reply from "/reply.svg";
 import copy from "/copy.svg";
 import del from "/delete.svg";
 import edit from "/edit.svg";
+import reactIcon from "/react.svg";
+import pinIcon from "/pin.svg";
 import { downloadFile } from "../../../../download";
 import { useToast } from "../../../ui/Toast";
 import Spinner from "../../../ui/Spinner";
@@ -44,10 +46,11 @@ const fileBadge = (contentType, name) =>
   };
 
 export default function (props) {
-  const { profiles, db, userID, Messages, chatID, socket, starred, toggleStar, chatdata, pinMessage, unpinMessage, reactMessage, report } = useCtx();
+  const { profiles, requestProfile, db, userID, Messages, setMessages, chatID, socket, starred, toggleStar, chatdata, pinMessage, unpinMessage, reactMessage, report } = useCtx();
   const contextref = useRef();
   const [showReactions, setShowReactions] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const longPressTimer = useRef(null);
   const toast = useToast();
   const messageItem = props.item;
   if (!messageItem.status) {
@@ -68,34 +71,61 @@ export default function (props) {
     : null;
   const repliedProfile = repliedMessage ? profiles[repliedMessage.uid] || {} : {};
 
+  const sendToServer = useCallback(() => {
+    socket.current.emit(
+      chatID.type == "user" ? "createChatPrivate" : "sendMessage",
+      {
+        cid: messageItem.chat,
+        content: messageItem.content,
+        replace: messageItem._id,
+        reply_to: messageItem.reply_to,
+        attachments: messageItem.attachments,
+      }
+    );
+  }, [chatID.type, messageItem]);
+
+  // Base64-encoded attachments over the socket take a lot longer than a
+  // plain text send on a slow connection, so give them more room before
+  // giving up and surfacing a retry affordance.
+  const failTimeoutMs = messageItem.attachments && messageItem.attachments.length > 0 ? 45000 : 15000;
+
+  const markFailed = useCallback(() => {
+    setMessages((prev) => {
+      const chatStore = prev[messageItem.chat];
+      // Only flip to "failed" if this is still the same pending row - it may
+      // have already been replaced by the real ack (success), or already
+      // retried, between the timer being armed and now.
+      if (!chatStore || !chatStore[messageItem.mid] || chatStore[messageItem.mid].status !== "⧖") return prev;
+      const updated = { ...chatStore[messageItem.mid], status: "!" };
+      if (db) db.transaction("messages", "readwrite").objectStore("messages").put(updated);
+      return { ...prev, [messageItem.chat]: { ...chatStore, [messageItem.mid]: updated } };
+    });
+  }, [messageItem.chat, messageItem.mid, setMessages, db]);
+
+  const retryHandle = useCallback(() => {
+    setMessages((prev) => {
+      const chatStore = prev[messageItem.chat];
+      if (!chatStore || !chatStore[messageItem.mid]) return prev;
+      const updated = { ...chatStore[messageItem.mid], status: "⧖" };
+      if (db) db.transaction("messages", "readwrite").objectStore("messages").put(updated);
+      return { ...prev, [messageItem.chat]: { ...chatStore, [messageItem.mid]: updated } };
+    });
+    sendToServer();
+    setTimeout(markFailed, failTimeoutMs);
+  }, [messageItem.chat, messageItem.mid, setMessages, db, sendToServer, markFailed, failTimeoutMs]);
+
   useEffect(() => {
-    if (messageItem.status == "⧖") {
-      console.log(
-        "pending",
-        chatID.type == "user" ? "createChatPrivate" : "sendMessage",
-        chatID.type == "user" ? "createChatPrivate" : "sendMessage",
-        messageItem
-      );
-      socket.current.emit(
-        chatID.type == "user" ? "createChatPrivate" : "sendMessage",
-        {
-          cid: messageItem.chat,
-          content: messageItem.content,
-          replace: messageItem._id,
-          reply_to: messageItem.reply_to,
-          attachments: messageItem.attachments,
-        }
-      );
-    }
-  }, []);
-  useEffect(() => {
-    //        messageCache
+    if (messageItem.status !== "⧖") return;
+    sendToServer();
+    const timer = setTimeout(markFailed, failTimeoutMs);
+    return () => clearTimeout(timer);
+    // Mount-only, matching the original one-shot-send behavior - retries are
+    // driven explicitly via retryHandle, not by this effect re-running.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (!profiles[messageItem.uid]) {
-      socket.current.emit("getProfile", { uid: messageItem.uid });
-    }
+    requestProfile(messageItem.uid);
   }, [profiles[messageItem.uid]]);
 
   const handleRight = (event) => {
@@ -116,6 +146,23 @@ export default function (props) {
     flag=1;
     event.preventDefault();
   };
+
+  // Touch/mouse equivalent of the right-click menu - WhatsApp's "hold a
+  // message to select" pattern. Starts selection mode on the held message,
+  // or (once already in selection mode) toggles it, same as tapping the
+  // checkbox.
+  const startLongPress = () => {
+    longPressTimer.current = setTimeout(() => {
+      if (props.selectionMode) props.onToggleSelect(messageItem._id);
+      else props.onEnterSelection(messageItem._id);
+    }, 500);
+  };
+  const cancelLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
   const onClick = useCallback(() => {
     props.infoPanel.current = messageItem.uid;
     props.setDialog(2);
@@ -128,7 +175,7 @@ export default function (props) {
     navigator.clipboard.writeText(messageItem.content);
   };
   const forwardHandle = () => {
-    props.setForward([messageItem, profile]);
+    props.setForward([messageItem]);
   };
   const reportHandle = () => {
     report(messageItem._id, "message");
@@ -143,7 +190,12 @@ export default function (props) {
   const chat = chatdata[chatID.id] || {};
   const canPin = chat.type !== 'group' || (chat.admins||[]).includes(userID.current) || chat.owner===userID.current;
   const isPinned = (chat.pinned||[]).includes(messageItem._id);
+  const pinLimitReached = !isPinned && (chat.pinned || []).length >= 6;
   const pinHandle = () => {
+    if (pinLimitReached) {
+      toast.error("You can only pin up to 6 messages — unpin one first");
+      return;
+    }
     (isPinned ? unpinMessage : pinMessage)(messageItem._id, chatID.id);
   };
   const reactHandle = (emoji) => {
@@ -165,31 +217,65 @@ export default function (props) {
   return (
     <div
       id={messageItem._id}
-      className={`w-full flex ${grouped ? "mt-0.5" : "mt-2.5"} justify-${flag ? "end" : "start"} animate-fade-in-up`}
+      className={`group w-full flex ${grouped ? "mt-0.5" : "mt-2.5"} justify-${flag ? "end" : "start"} animate-fade-in-up`}
     >
-      <div className="mr-2 w-7 h-full flex shrink-0">
-        {!grouped && !flag && (
+      <div className="mr-2 w-7 h-full flex items-start shrink-0">
+        {props.selectionMode ? (
           <button
-            onClick={onClick}
-            className="rounded-full h-fit"
+            type="button"
+            onClick={() => props.onToggleSelect(messageItem._id)}
+            aria-label={props.selected ? "Deselect message" : "Select message"}
+            className={`w-5 h-5 mt-1 rounded-full border-2 flex items-center justify-center transition-colors ${
+              props.selected ? "bg-[var(--accent)] border-[var(--accent)]" : "border-gray-300 dark:border-gray-500 bg-white/60 dark:bg-white/10"
+            }`}
           >
-            <Avatar src={profile.img && profile.img.src} size="xs" />
+            {props.selected && (
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            )}
           </button>
+        ) : (
+          !grouped && !flag && (
+            <button
+              onClick={onClick}
+              className="rounded-full h-fit"
+            >
+              <Avatar src={profile.img && profile.img.src} size="xs" />
+            </button>
+          )
         )}
       </div>
 
-      <div onContextMenu={handleRight} className="relative max-w-[75%] md:max-w-[60%]">
+      <div
+        onContextMenu={handleRight}
+        onPointerDown={startLongPress}
+        onPointerUp={cancelLongPress}
+        onPointerLeave={cancelLongPress}
+        onPointerCancel={cancelLongPress}
+        className="relative flex items-center gap-1 max-w-[75%] md:max-w-[60%]"
+      >
+        <div className="relative min-w-0">
+        {props.selectionMode && (
+          <div
+            onClick={() => props.onToggleSelect(messageItem._id)}
+            className="absolute inset-0 z-20 cursor-pointer rounded-[1.15rem]"
+          />
+        )}
         {deleting && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/30 rounded-2xl z-10">
             <Spinner size="sm" />
           </div>
         )}
         <div
-          className={`px-2.5 py-1.5 shadow-sm relative
-            ${flag ? "bg-[#DCF8C6] dark:bg-[#245a4b] dark:text-gray-100" : "bg-white dark:bg-gray-700 dark:text-gray-100"}
+          className={`px-3 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] relative border
             ${flag
-              ? `rounded-2xl ${grouped ? "rounded-tr-2xl" : "rounded-tr-md"}`
-              : `rounded-2xl ${grouped ? "rounded-tl-2xl" : "rounded-tl-md"}`}
+              ? "bg-[var(--accent-light)] dark:bg-[#3a2a52] text-gray-800 dark:text-gray-100 border-[var(--accent)]/15 dark:border-white/5"
+              : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 border-black/5 dark:border-white/5"}
+            ${flag
+              ? `rounded-[1.15rem] ${grouped ? "rounded-tr-[1.15rem]" : "rounded-tr-md"}`
+              : `rounded-[1.15rem] ${grouped ? "rounded-tl-[1.15rem]" : "rounded-tl-md"}`}
+            ${props.selected ? "ring-2 ring-[var(--accent)]" : ""}
           `}
         >
           <div>
@@ -271,14 +357,28 @@ export default function (props) {
             {(() => {
               const footer = (
                 <span className="shrink-0 flex items-center gap-0.5 text-[0.65rem] text-gray-400 ml-auto -mb-0.5">
-                  {isPinned && <span title="Pinned">📌</span>}
+                  {isPinned && <img src={pinIcon} title="Pinned" alt="Pinned" className="w-2.5 h-2.5 opacity-60 dark:invert" />}
                   {isStarred && <span className="text-amber-500">★</span>}
                   {messageItem.edited && <span className="italic">edited</span>}
                   {pad(time.getHours())}:{pad(time.getMinutes())}
                   {flag && (messageItem.status === "⧖" ? (
-                    <Spinner size="xs" className="align-middle" />
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); markFailed(); }}
+                      title="Sending… · Tap to cancel"
+                      className="align-middle"
+                    >
+                      <Spinner size="xs" />
+                    </button>
+                  ) : messageItem.status === "!" ? (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); retryHandle(); }}
+                      title="Failed to send · Tap to retry"
+                      className="w-3.5 h-3.5 rounded-full bg-red-500 text-white flex items-center justify-center text-[0.55rem] font-bold leading-none shrink-0"
+                    >!</button>
                   ) : (
-                    <span className={messageItem.status === "✔✔" ? "text-purple-500" : ""}>{messageItem.status}</span>
+                    <span className={messageItem.status === "✔✔" ? "text-[var(--accent-dark)]" : ""}>{messageItem.status}</span>
                   ))}
                 </span>
               );
@@ -365,14 +465,6 @@ export default function (props) {
           </button>
 
           <button
-            onClick={(e) => { e.stopPropagation(); contextref.current.style.display = "none"; setShowReactions((v) => !v); }}
-            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
-          >
-            <span className="w-4 h-4 flex items-center justify-center">😊</span>
-            <div>React</div>
-          </button>
-
-          <button
             onClick={starHandle}
             className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
           >
@@ -383,9 +475,11 @@ export default function (props) {
           {canPin && (
             <button
               onClick={pinHandle}
-              className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+              disabled={pinLimitReached}
+              title={pinLimitReached ? "Pin limit reached (6) - unpin one first" : undefined}
+              className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:hover:bg-transparent"
             >
-              <span className={`w-4 h-4 flex items-center justify-center ${isPinned ? "" : "opacity-60"}`}>📌</span>
+              <img src={pinIcon} className={`w-4 h-4 dark:invert ${isPinned ? "" : "opacity-60 dark:opacity-80"}`} alt="" />
               <div>{isPinned ? "Unpin" : "Pin"}</div>
             </button>
           )}
@@ -416,6 +510,20 @@ export default function (props) {
             <div>Report</div>
           </button>
         </div>
+        </div>
+
+        {/* WhatsApp-style hover affordance - lives on the message itself
+            instead of being buried in the right-click menu. Only visible on
+            hover/focus so it doesn't clutter every row at rest. */}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setShowReactions((v) => !v); }}
+          title="React"
+          aria-label="React to message"
+          className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-white dark:bg-gray-800 shadow-sm border border-black/5 dark:border-white/10 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+        >
+          <img src={reactIcon} className="w-3.5 h-3.5 opacity-70 dark:invert" alt="" />
+        </button>
       </div>
     </div>
   );

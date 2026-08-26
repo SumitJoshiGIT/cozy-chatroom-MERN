@@ -4,6 +4,7 @@ import {
   useState,
   useEffect,
   useRef,
+  useCallback,
   createContext,
   useMemo,
   useContext,
@@ -61,6 +62,23 @@ function ChatScreen(props) {
   const chatsReadyRef = useRef(false);
   const contactsReadyRef = useRef(false);
   const typingTimers = useRef({});
+  // Many independent components (every Message row, every sidebar Entity,
+  // the "chat"/"messages"/"contacts" handlers below) each notice the same
+  // not-yet-cached uid and ask for it - without this, a chat that loads 30
+  // messages from an unknown sender fired 30 redundant "getProfile" round
+  // trips. Track in-flight uids here and only let the first request through;
+  // the "profile" handler below clears an entry once its response lands.
+  const pendingProfileRequests = useRef(new Set());
+  const requestProfile = useCallback((uid) => {
+    if (!uid || profiles[uid] || pendingProfileRequests.current.has(uid)) return;
+    pendingProfileRequests.current.add(uid);
+    socket.current.emit("getProfile", { uid });
+    // The "profile" handler below clears this on a successful response, but
+    // a lookup for a uid that no longer exists resolves with a null user -
+    // there's nothing to key off then, so this uid would otherwise stay
+    // marked in-flight forever. Bound the worst case instead of blocking it.
+    setTimeout(() => pendingProfileRequests.current.delete(uid), 8000);
+  }, [profiles]);
   // Below this width the chat list and the open conversation are two
   // separate full-screen views (one at a time) instead of a side-by-side
   // split - matches Tailwind's `md` breakpoint, already used elsewhere.
@@ -217,8 +235,7 @@ function ChatScreen(props) {
                       .objectStore("messages")
                       .put(data);
                     store[data.mid] = data;
-                    if (!profiles[data.uid])
-                      socket.current.emit("getProfile", { uid: data.uid });
+                    requestProfile(data.uid);
                   })
                 );
                // console.log("recieved", dat);
@@ -410,6 +427,7 @@ function ChatScreen(props) {
 
             socket.current.on("profile", async (data) => {
               if (data) {
+                pendingProfileRequests.current.delete(data._id);
                 // Cache-bust (and guard against re-prefixing an already-
                 // processed payload - a chat member can receive duplicate
                 // "profile" broadcasts, e.g. if they share more than one
@@ -444,8 +462,7 @@ function ChatScreen(props) {
                         if (uid != userID.current) {
                           privateChats.current[uid] = data._id;
                           data.sender = uid;
-                          if (!profiles[uid])
-                            socket.current.emit("getProfile", { uid: uid });
+                          requestProfile(uid);
                         }
                       });
                     } else if (datagroup.type == "join") {
@@ -525,9 +542,7 @@ function ChatScreen(props) {
               contactsReadyRef.current = true;
               setContactsLoaded(true);
               setContacts(new Set(data));
-              data.forEach((uid) => {
-                if (!profiles[uid]) socket.current.emit("getProfile", { uid });
-              });
+              data.forEach((uid) => requestProfile(uid));
             });
 
             // The server resolves the socket's profile asynchronously before
@@ -640,6 +655,7 @@ function ChatScreen(props) {
       value={{
         userID,
         profiles,
+        requestProfile,
         socket,
         db,
         chatdata,
