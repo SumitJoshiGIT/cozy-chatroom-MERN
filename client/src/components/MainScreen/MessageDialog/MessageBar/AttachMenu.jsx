@@ -1,11 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 import { useToast } from "../../../ui/Toast";
 import Spinner from "../../../ui/Spinner";
+import mediaIcon from "/media.svg";
+import audioIcon from "/audio.svg";
+import filesIcon from "/files.svg";
+import locationIcon from "/location.svg";
 
 const CATEGORIES = [
-  { label: "Photos & Videos", icon: "🖼️", accept: "image/*,video/*" },
-  { label: "Audio", icon: "🎵", accept: "audio/*" },
-  { label: "Document", icon: "📄", accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" },
+  { label: "Photos & Videos", icon: mediaIcon, accept: "image/*,video/*" },
+  { label: "Audio", icon: audioIcon, accept: "audio/*" },
+  { label: "Document", icon: filesIcon, accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" },
 ];
 
 const DURATIONS = [
@@ -134,7 +138,7 @@ export default function AttachMenu({ onPick, onSendLocation, sharingLiveLocation
                   }}
                   className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10"
                 >
-                  <span className="text-lg leading-none">{c.icon}</span>
+                  <img src={c.icon} alt="" className="w-5 h-5 opacity-70 dark:invert" />
                   <span>{c.label}</span>
                 </button>
               ))}
@@ -143,7 +147,7 @@ export default function AttachMenu({ onPick, onSendLocation, sharingLiveLocation
                 onClick={() => setView("location")}
                 className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10"
               >
-                <span className="text-lg leading-none">📍</span>
+                <img src={locationIcon} alt="" className="w-5 h-5 opacity-70 dark:invert" />
                 <span>Location</span>
               </button>
             </>

@@ -1,5 +1,5 @@
 import React from "react";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { useCtx } from "../../AppScreen";
 import { apiOrigin } from "../../../../apiOrigin";
 import Avatar from "../../../ui/Avatar";
@@ -13,7 +13,11 @@ import { downloadFile } from "../../../../download";
 import { useToast } from "../../../ui/Toast";
 import Spinner from "../../../ui/Spinner";
 import VoiceNote from "./VoiceNote";
-import LocationMessage from "./LocationMessage";
+// Leaflet (pulled in by LocationMessage) is ~150kB gzipped on its own and
+// only ever needed for the rare message that actually shares a location -
+// split it into its own chunk instead of shipping it in everyone's initial
+// bundle.
+const LocationMessage = lazy(() => import("./LocationMessage"));
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const formatSize = (bytes) => {
   if (!bytes) return "";
@@ -216,11 +220,13 @@ export default function (props) {
 
             {messageItem.location && (
               <div className="mb-1">
-                <LocationMessage
-                  location={messageItem.location}
-                  flag={flag}
-                  onStop={() => socket.current.emit("stopLiveLocation", { id: messageItem._id })}
-                />
+                <Suspense fallback={<div className="w-56 h-36 rounded-2xl bg-black/5 dark:bg-white/10 animate-pulse" />}>
+                  <LocationMessage
+                    location={messageItem.location}
+                    flag={flag}
+                    onStop={() => socket.current.emit("stopLiveLocation", { id: messageItem._id })}
+                  />
+                </Suspense>
               </div>
             )}
 
