@@ -23,6 +23,31 @@ function ChatScreen(props) {
   }, [chatID]);
   const [Messages, setMessages] = useState({});
   const [chatdata, setChatdata] = useState({});
+  // A push notification click (or a plain ?chat= link) names a chat id but
+  // not its type, and chatID needs both - wait for that chat's data to show
+  // up in chatdata (already loaded, or arrives via the normal sync path)
+  // before actually switching to it.
+  const pendingDeepLinkChat = useRef((() => {
+    try { return new URLSearchParams(window.location.search).get("chat"); } catch { return null; }
+  })());
+  useEffect(() => {
+    const handler = (event) => {
+      if (event.data && event.data.type === "notificationclick" && event.data.chatId) {
+        pendingDeepLinkChat.current = event.data.chatId;
+      }
+    };
+    if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", handler);
+    return () => {
+      if ("serviceWorker" in navigator) navigator.serviceWorker.removeEventListener("message", handler);
+    };
+  }, []);
+  useEffect(() => {
+    const id = pendingDeepLinkChat.current;
+    if (id && chatdata[id]) {
+      setChatID({ id, type: chatdata[id].type === "group" ? "group" : "private" });
+      pendingDeepLinkChat.current = null;
+    }
+  }, [chatdata]);
   const [contacts, setContacts] = useState(new Set());
   const [starred, setStarred] = useState(new Set());
   const [starredMessages, setStarredMessages] = useState([]);

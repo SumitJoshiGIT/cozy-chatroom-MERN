@@ -1,5 +1,6 @@
 const models = require("../../models/exports");
 const { verifyToken } = require("../../utils/socketAuthTokens");
+const { webpush, enabled: webPushEnabled } = require("../../utils/webPush");
 const ObjectID = require("mongoose").Types.ObjectId;
 const fs = require("fs");
 const path = require("path");
@@ -177,8 +178,41 @@ async function onConnection(socket, io) {
             replace: message.replace,
             data: [newMessage],
           });
+          sendPushNotifications(parentChat, newMessage);
         } catch (err) {
           console.log(err);
+        }
+      }
+    }
+
+    // Only for members who aren't already connected - anyone with a live
+    // socket already got the message above via the room push, and pushing to
+    // them too would mean a duplicate notification for a chat they have open.
+    async function sendPushNotifications(chat, message) {
+      if (!webPushEnabled) return;
+      const recipients = (chat.users || []).filter((u) => u.toString() !== profile._id.toString());
+      if (!recipients.length) return;
+      const senderName = profile.name || profile.username;
+      const title = chat.type === "group" && chat.name ? `${senderName} (${chat.name})` : senderName;
+      const body = message.type === "location" ? "Shared a location"
+        : message.content ? message.content
+        : (message.attachments && message.attachments.length) ? "Sent an attachment"
+        : "New message";
+      const payload = JSON.stringify({ title, body, chatId: chat._id.toString() });
+      for (const uid of recipients) {
+        const sockets = await io.in(`user:${uid}`).fetchSockets();
+        if (sockets.length > 0) continue;
+        const subs = await models.PushSubscriptionsModel.find({ user: uid });
+        for (const sub of subs) {
+          webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload).catch(async (err) => {
+            // 404/410 means the browser revoked this subscription (uninstalled,
+            // cleared data, etc.) - stop trying to send to it.
+            if (err.statusCode === 404 || err.statusCode === 410) {
+              await models.PushSubscriptionsModel.deleteOne({ _id: sub._id });
+            } else {
+              console.log("push send failed", err.statusCode, err.body);
+            }
+          });
         }
       }
     }
@@ -241,6 +275,7 @@ async function onConnection(socket, io) {
           replace: stream.replace,
           data: [newMessage],
         });
+        sendPushNotifications(parentChat, newMessage);
         if (typeof ack === "function") ack({ _id: newMessage._id.toString() });
       } catch (err) {
         console.log(err);
@@ -692,6 +727,20 @@ async function onConnection(socket, io) {
         // updatedAt and produced a broken (NaN-timestamped) cache-busted URL
         // depending on which one the client processed last.
         chatSet.forEach((x) => socket.to(x).emit("profile",changes));
+    });
+
+    socket.on("pushSubscribe", async (subscription) => {
+      if (!subscription || !subscription.endpoint || !subscription.keys) return;
+      await models.PushSubscriptionsModel.findOneAndUpdate(
+        { endpoint: subscription.endpoint },
+        { user: profile._id, endpoint: subscription.endpoint, keys: subscription.keys },
+        { upsert: true }
+      );
+    });
+
+    socket.on("pushUnsubscribe", async ({ endpoint }) => {
+      if (!endpoint) return;
+      await models.PushSubscriptionsModel.deleteOne({ endpoint, user: profile._id });
     });
 
     function isChatAdmin(chat){

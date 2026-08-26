@@ -12,6 +12,7 @@ const { onConnection, onDisconnection } = require('./routes/api/socketEvents');
 const mongoose = require('mongoose');
 const { passport } = require('./routes/auth/passportSetup');
 const sharedsession = require('express-socket.io-session');
+const { vapidPublicKey } = require('./utils/webPush');
 
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
@@ -71,6 +72,10 @@ io.use(sharedsession(sessionMiddleware, { autoSave: true }));
 app.use(authRouter);
 
 app.get('/ping', (req, res) => res.send('pong'));
+
+// The VAPID public key isn't a secret (it's how a browser verifies pushes
+// came from us) - the client needs it before it can call pushManager.subscribe.
+app.get('/push/vapidPublicKey', (req, res) => res.json({ key: vapidPublicKey }));
 
 io.on('connection', (socket) => onConnection(socket, io));
 io.on('disconnect', onDisconnection);

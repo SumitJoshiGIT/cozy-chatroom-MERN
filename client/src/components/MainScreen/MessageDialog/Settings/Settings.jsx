@@ -9,6 +9,7 @@ import Avatar from "../../../ui/Avatar";
 import Switch from "../../../ui/Switch";
 import { THEMES, applyTheme, getStoredThemeId, applyDarkMode, getStoredDarkMode } from "../../../../theme";
 import { clearStoredAuthToken } from "../../../../socketAuthToken";
+import { isPushSupported, getStoredPushPreference, subscribeToPush, unsubscribeFromPush } from "../../../../pushNotifications";
 import close from "/close.svg";
 
 function Section({ title, children }) {
@@ -27,6 +28,30 @@ export default function Settings(props) {
   const [themeId, setThemeId] = useState(getStoredThemeId());
   const [reduceMotion, setReduceMotion] = useState(localStorage.getItem('lavender-reduce-motion') === 'true');
   const [darkMode, setDarkMode] = useState(getStoredDarkMode());
+  const [pushEnabled, setPushEnabled] = useState(getStoredPushPreference());
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState('');
+
+  const togglePush = async (val) => {
+    setPushError('');
+    setPushBusy(true);
+    try {
+      if (val) {
+        const ok = await subscribeToPush(socket);
+        if (!ok) {
+          setPushError('Notifications permission was denied or is unsupported in this browser.');
+          setPushBusy(false);
+          return;
+        }
+      } else {
+        await unsubscribeFromPush(socket);
+      }
+      setPushEnabled(val);
+    } catch (err) {
+      setPushError('Something went wrong enabling notifications.');
+    }
+    setPushBusy(false);
+  };
 
   const toggleDarkMode = (val) => {
     setDarkMode(val);
@@ -94,6 +119,19 @@ export default function Settings(props) {
                 <span className="text-[0.65rem] text-gray-500">{t.name}</span>
               </button>
             ))}
+          </div>
+        </Section>
+
+        <Section title="Notifications">
+          <div className="flex items-center justify-between px-3 py-3">
+            <div>
+              <div className="text-sm font-medium text-gray-700 dark:text-gray-200">Push notifications</div>
+              <div className="text-xs text-gray-400">
+                {isPushSupported() ? 'Get notified about new messages when Lavender is in the background' : 'Not supported in this browser'}
+              </div>
+              {pushError && <div className="text-xs text-red-500 mt-1">{pushError}</div>}
+            </div>
+            <Switch checked={pushEnabled} onChange={togglePush} disabled={pushBusy || !isPushSupported()} label="Push notifications" />
           </div>
         </Section>
 
