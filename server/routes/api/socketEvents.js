@@ -444,20 +444,6 @@ async function onConnection(socket, io) {
       }
     });
 
-    // Message threads: rather than a separate Threads collection, a
-    // "thread" is just every message whose reply_to points at rootId -
-    // the existing reply feature already builds exactly this graph, so
-    // opening a thread is a read-only query over it, nothing new to write.
-    socket.on("getThread", async ({ cid, rootId }) => {
-      if (!cid || !chatSet.has(cid) || !rootId) return;
-      try {
-        const results = await models.MessagesModel.find({ chat: cid, reply_to: rootId }).sort({ mid: 1 });
-        socket.emit("getThread", { cid, rootId, results });
-      } catch (err) {
-        console.log(err);
-      }
-    });
-
     socket.on("report", async ({ id, targetType, reason }) => {
       if (!id || !["user", "chat", "message"].includes(targetType)) return;
       try {
