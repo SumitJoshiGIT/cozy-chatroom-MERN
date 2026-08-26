@@ -70,7 +70,7 @@ function Tick({ className = "" }) {
 }
 
 export default function (props) {
-  const { profiles, requestProfile, db, userID, Messages, setMessages, chatID, socket, starred, toggleStar, chatdata, pinMessage, unpinMessage, reactMessage, report } = useCtx();
+  const { profiles, requestProfile, db, userID, Messages, setMessages, chatID, socket, starred, toggleStar, chatdata, pinMessage, unpinMessage, reactMessage, report, stopLiveLocationTracking } = useCtx();
   const contextref = useRef();
   const [showReactions, setShowReactions] = useState(false);
   const [mediaPreview, setMediaPreview] = useState(null);
@@ -333,7 +333,14 @@ export default function (props) {
                   <LocationMessage
                     location={messageItem.location}
                     flag={flag}
-                    onStop={() => socket.current.emit("stopLiveLocation", { id: messageItem._id })}
+                    onStop={() => {
+                      socket.current.emit("stopLiveLocation", { id: messageItem._id });
+                      // Tells the server, but that alone left the sender's
+                      // own watchPosition loop running until its duration
+                      // timer elapsed - also clear it here, via the shared
+                      // ref MessageBar.jsx writes to when it starts tracking.
+                      stopLiveLocationTracking(messageItem._id);
+                    }}
                   />
                 </Suspense>
               </div>

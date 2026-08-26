@@ -75,6 +75,10 @@ const Chats=new mongoose.Schema
         attachmentName:String,
         liveLocation:Boolean,
         createdAt:Date,
+        // So a client can independently notice a stale preview (the sidebar
+        // is showing a message that has since disappeared) without needing
+        // that chat's full message history loaded - see refreshLastMessage.
+        expiresAt:Date,
     },{_id:false}),
     default:null,
    }

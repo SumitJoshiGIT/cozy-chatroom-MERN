@@ -79,27 +79,50 @@ async function saveUpload(base64, mimeType, name, size, extraTypes) {
 // Denormalized onto Chats so the sync manifest can tell a chat changed
 // without loading message history, and the sidebar can show a preview
 // without having fetched that chat's messages at all (see the lazy/eager
-// message-sync redesign). A lightweight findByIdAndUpdate rather than a
-// full chat.save() - avoids loading/re-serializing the whole chat doc, and
-// (since Chats has timestamps:true) bumps updatedAt as a side effect, which
-// is what makes the sync manifest's updatedAt diff fire on new messages.
-async function updateLastMessage(cid, message) {
+// message-sync redesign).
+function lastMessageSnapshot(message) {
   const firstAttachment = Array.isArray(message.attachments) && message.attachments.length ? message.attachments[0] : null;
-  await models.ChatsModel.findByIdAndUpdate(cid, {
-    $set: {
-      lastMessage: {
-        _id: message._id,
-        mid: message.mid,
-        uid: message.uid,
-        type: message.type,
-        content: message.content,
-        attachmentType: firstAttachment ? firstAttachment.contentType : undefined,
-        attachmentName: firstAttachment ? firstAttachment.name : undefined,
-        liveLocation: message.location ? !!message.location.live : undefined,
-        createdAt: message.createdAt,
-      },
-    },
-  });
+  return {
+    _id: message._id,
+    mid: message.mid,
+    uid: message.uid,
+    type: message.type,
+    content: message.content,
+    attachmentType: firstAttachment ? firstAttachment.contentType : undefined,
+    attachmentName: firstAttachment ? firstAttachment.name : undefined,
+    liveLocation: message.location ? !!message.location.live : undefined,
+    createdAt: message.createdAt,
+    // So a client can independently notice a stale preview (the sidebar is
+    // showing a message that's since disappeared) without needing that
+    // chat's full history loaded - see refreshLastMessage below.
+    expiresAt: message.expiresAt || undefined,
+  };
+}
+
+// A lightweight findByIdAndUpdate rather than a full chat.save() - avoids
+// loading/re-serializing the whole chat doc, and (since Chats has
+// timestamps:true) bumps updatedAt as a side effect, which is what makes the
+// sync manifest's updatedAt diff fire on new messages.
+async function updateLastMessage(cid, message) {
+  await models.ChatsModel.findByIdAndUpdate(cid, { $set: { lastMessage: lastMessageSnapshot(message) } });
+}
+
+// Disappearing messages don't push a "this expired" event to anyone (Mongo's
+// TTL index is a passive background sweep, not a hook), so a chat's
+// denormalized lastMessage would otherwise keep showing a preview of a
+// message that's actually gone. Clients call this once they notice
+// (client-side, comparing against the expiresAt already denormalized above)
+// that the chat's own sidebar preview has expired.
+async function refreshLastMessage(cid) {
+  const survivor = await models.MessagesModel.findOne({
+    chat: cid,
+    $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
+  }).sort({ mid: -1 });
+  return models.ChatsModel.findByIdAndUpdate(
+    cid,
+    { $set: { lastMessage: survivor ? lastMessageSnapshot(survivor) : null } },
+    { new: true }
+  );
 }
 async function onConnection(socket, io) {
   // Every socket.on(...) handler below is async and mostly unguarded. On
@@ -829,6 +852,12 @@ async function onConnection(socket, io) {
       chat.disappearingDuration = duration && DISAPPEARING_DURATIONS.includes(duration) ? duration : null;
       await chat.save();
       io.to(chat._id.toString()).emit("chat", { type: "chats", chats: [chat] });
+    });
+
+    socket.on("refreshLastMessage", async ({ cid }) => {
+      if (!cid || !chatSet.has(cid)) return;
+      const chat = await refreshLastMessage(cid);
+      if (chat) io.to(cid).emit("chat", { type: "chats", chats: [chat] });
     });
 
     socket.on("removeUser", async ({chatID, userID: targetId}) => {

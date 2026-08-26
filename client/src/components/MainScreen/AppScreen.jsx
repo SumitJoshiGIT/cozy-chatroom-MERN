@@ -96,6 +96,24 @@ function ChatScreen(props) {
     });
   }, []);
 
+  // Live location sharing: lifted here (not local to MessageBar, where it
+  // used to live) so Message.jsx's "Stop" button on the live-location bubble
+  // - a different component - can actually clear the sender's own
+  // navigator.geolocation.watchPosition loop and the "already sharing"
+  // gate, instead of only telling the server. Previously only the server
+  // was told, so the sender's own watch kept running (and "Share live
+  // location" stayed disabled) until its duration timer elapsed - harmless,
+  // just wasted battery/bandwidth and confusing UI.
+  const liveLocationRef = useRef(null); // { messageId, watchId, cid }
+  const [liveLocationChat, setLiveLocationChat] = useState(null);
+  const stopLiveLocationTracking = useCallback((messageId) => {
+    if (liveLocationRef.current && (!messageId || liveLocationRef.current.messageId === messageId)) {
+      navigator.geolocation.clearWatch(liveLocationRef.current.watchId);
+      liveLocationRef.current = null;
+      setLiveLocationChat(null);
+    }
+  }, []);
+
   // Below this width the chat list and the open conversation are two
   // separate full-screen views (one at a time) instead of a side-by-side
   // split - matches Tailwind's `md` breakpoint, already used elsewhere.
@@ -679,6 +697,11 @@ function ChatScreen(props) {
         requestProfile,
         drafts,
         setDraft,
+        chatIDRef,
+        liveLocationRef,
+        liveLocationChat,
+        setLiveLocationChat,
+        stopLiveLocationTracking,
         socket,
         db,
         chatdata,

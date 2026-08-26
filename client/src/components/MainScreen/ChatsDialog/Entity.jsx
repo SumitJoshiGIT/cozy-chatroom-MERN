@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 import { useCtx } from "../AppScreen";
 import Avatar from "../../ui/Avatar";
@@ -6,6 +6,7 @@ import Avatar from "../../ui/Avatar";
 export default function (props) {
   const {
     chatID,
+    chatIDRef,
     socket,db,
     profiles,
     requestProfile,
@@ -53,8 +54,9 @@ export default function (props) {
 
   useEffect(()=>{
     if (chat.type == "user") {
-      socket.current.on(`private.${chat._id}`, (newchat) => {
-        newchat.sender = chat._id;
+      const pseudoId = chat._id;
+      socket.current.on(`private.${pseudoId}`, (newchat) => {
+        newchat.sender = pseudoId;
         props.cache.current.chats[newchat._id] = newchat;
         setChatdata((prev) => {
           const n = { ...prev };
@@ -63,6 +65,18 @@ export default function (props) {
           return n;
         });
         setId(newchat._id);
+        // AppScreen.jsx's "messages" handler independently migrates the
+        // pending message and the globally-open chatID from this same
+        // pseudo id, triggered by a *different* server event ("messages",
+        // not "private.<id>") fired later in the same createChatPrivate
+        // call. Whichever of the two arrives first, deleting the pseudo-id
+        // entry from chatdata above - while chatID still points at it,
+        // if this contact is the one currently open - leaves
+        // chatdata[chatID.id] resolving to nothing until the other handler
+        // catches up. Updating chatID here too closes that window
+        // regardless of arrival order (a harmless no-op re-set if the other
+        // handler already did it first).
+        if (chatIDRef.current.id === pseudoId) setChatID({ id: newchat._id, type: newchat.type });
       });
     }
   }, [chatid]);
@@ -74,6 +88,31 @@ export default function (props) {
   // whose message history hasn't been fetched at all (messages now load
   // lazily, only once a chat is actually opened).
   const latest = chat.lastMessage;
+
+  // Disappearing messages: the sidebar preview is denormalized onto the
+  // chat doc, so it doesn't update on its own when the message it's showing
+  // expires (nothing pushes that - Mongo's TTL sweep is passive). Each chat
+  // row independently notices via its own expiresAt and asks the server to
+  // recompute it - this runs regardless of whether the chat itself is
+  // currently open, unlike Messages.jsx's per-message sweep.
+  const refreshRequested = useRef(false);
+  useEffect(() => {
+    if (!latest || !latest.expiresAt) return;
+    const check = () => {
+      if (refreshRequested.current) return;
+      if (new Date(latest.expiresAt).getTime() > Date.now()) return;
+      refreshRequested.current = true;
+      socket.current.emit("refreshLastMessage", { cid: chat._id });
+    };
+    check();
+    const interval = setInterval(check, 30000);
+    return () => clearInterval(interval);
+  }, [latest && latest._id, latest && latest.expiresAt]);
+
+  // A fresh lastMessage (new send, or the very refresh this effect just
+  // asked for) means the in-flight guard above no longer applies to it.
+  useEffect(() => { refreshRequested.current = false; }, [latest && latest._id]);
+
   const attachmentPreviewLabel = (contentType, name) => {
     const type = contentType || "";
     if (type.startsWith("image/")) return "📷 Photo";

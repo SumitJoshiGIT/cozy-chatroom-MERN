@@ -26,7 +26,7 @@ const docTypes = [
 ];
 const acceptedTypes = [...imageTypes, ...videoTypes, ...audioTypes, ...docTypes];
 const MessageBar = React.memo((props) => {
-  const { setMessages, db, scrollable, userID, chatID, socket, emitTyping, chatdata, blocked, toggleBlock, drafts, setDraft }=useCtx();
+  const { setMessages, db, scrollable, userID, chatID, socket, emitTyping, chatdata, blocked, toggleBlock, drafts, setDraft, liveLocationRef, liveLocationChat, setLiveLocationChat, stopLiveLocationTracking }=useCtx();
   const toast=useToast();
   const chat = chatdata[chatID.id] || {};
   const blockedOther = chat.type !== 'group' && chat.sender && blocked.has(chat.sender);
@@ -43,8 +43,6 @@ const MessageBar = React.memo((props) => {
   const recordingIntervalRef = useRef(null);
   const recordingStreamRef = useRef(null);
   const maxRecordingSeconds = 180;
-  const liveLocationRef = useRef(null); // { messageId, watchId, cid }
-  const [liveLocationChat, setLiveLocationChat] = useState(null);
 
   useEffect(() => {
     return () => {
@@ -53,18 +51,12 @@ const MessageBar = React.memo((props) => {
         liveLocationRef.current = null;
       }
     };
-  }, []);
-
-  function clearLiveLocation() {
-    if (liveLocationRef.current) navigator.geolocation.clearWatch(liveLocationRef.current.watchId);
-    liveLocationRef.current = null;
-    setLiveLocationChat(null);
-  }
+  }, [liveLocationRef]);
 
   function sendLocation({ lat, lng, live, durationMs }) {
     socket.current.emit("sendLocation", { cid: chatID.id, lat, lng, live, durationMs }, (res) => {
       if (!res || !res._id || !live) return;
-      clearLiveLocation();
+      stopLiveLocationTracking();
       const cid = chatID.id;
       const watchId = navigator.geolocation.watchPosition(
         (pos) => {
@@ -79,9 +71,7 @@ const MessageBar = React.memo((props) => {
       );
       liveLocationRef.current = { messageId: res._id, watchId, cid };
       setLiveLocationChat(cid);
-      setTimeout(() => {
-        if (liveLocationRef.current && liveLocationRef.current.messageId === res._id) clearLiveLocation();
-      }, durationMs || 15 * 60 * 1000);
+      setTimeout(() => stopLiveLocationTracking(res._id), durationMs || 15 * 60 * 1000);
     });
   }
 
