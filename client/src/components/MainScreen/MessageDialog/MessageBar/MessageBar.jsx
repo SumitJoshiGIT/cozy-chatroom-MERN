@@ -118,6 +118,11 @@ const MessageBar = React.memo((props) => {
       chat: chatID.id,
       time: new Date(),
       reply_to: r2,
+      // Message.jsx's timestamp and Messages.jsx's day divider both read
+      // createdAt specifically - without it, new Date(undefined) rendered
+      // as "NaN:NaN" and "Invalid Date" for the whole time this message
+      // was still pending.
+      createdAt: new Date(),
       updatedAt: new Date(),
       status: "⧖",
       attachments: files,
@@ -147,6 +152,8 @@ const MessageBar = React.memo((props) => {
       chat: chatID.id,
       time: new Date(),
       reply_to: null,
+      // See the matching comment in SendMessage above.
+      createdAt: new Date(),
       updatedAt: new Date(),
       status: "⧖",
       attachments: [attachment],
