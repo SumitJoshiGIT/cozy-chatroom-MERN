@@ -877,14 +877,19 @@ async function onConnection(socket, io) {
     socket.on("createChatPrivate", async (stream) => {
     
       let user = await models.UsersModel.findById(stream.cid);
-      if (user && user._id != profile._id && !user.blocked.some((b) => b.toString() === profile._id.toString())) {
+      const isSelf = user && user._id.toString() === profile._id.toString();
+      if (user && !user.blocked.some((b) => b.toString() === profile._id.toString())) {
         let data = await models.ChatsModel.findOne({
           type: "private",
+          // Not deduped via Set - a "message yourself" chat needs users to
+          // stay a genuine 2-element [id, id] array so this $size:2 lookup
+          // (and the one used to create it below) stay consistent whether
+          // or not the two ids happen to be the same person.
           users: { $size: 2, $all: [profile._id, user._id] },
         });
         if (!data){
            data = new models.ChatsModel({
-            users: [...new Set([profile._id, user._id])],
+            users: [profile._id, user._id],
             type: "private",
           });
           await data.save();
@@ -899,12 +904,16 @@ async function onConnection(socket, io) {
         // message back didn't fix it either - $addToSet here is idempotent
         // so it's safe to run on every call, new chat or not.
         chatSet.add(data._id.toString());
+        // Self-chat: don't add yourself to your own contacts list - you'd
+        // otherwise show up in your own "pick a contact" picker.
         await models.UsersModel.findByIdAndUpdate(profile._id, {
-          $addToSet: { Chats: data._id, contacts: user._id },
+          $addToSet: isSelf ? { Chats: data._id } : { Chats: data._id, contacts: user._id },
         });
-        await models.UsersModel.findByIdAndUpdate(user._id, {
-          $addToSet: { Chats: data._id, contacts: profile._id },
-        });
+        if (!isSelf) {
+          await models.UsersModel.findByIdAndUpdate(user._id, {
+            $addToSet: { Chats: data._id, contacts: profile._id },
+          });
+        }
         data.sender = stream.cid;
         socket.join(data._id.toString());
         socket.emit(`private.${stream.cid}`,data);

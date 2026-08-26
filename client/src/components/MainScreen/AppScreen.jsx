@@ -458,13 +458,17 @@ function ChatScreen(props) {
                     // See the "profile" handler above for why this needs cache-busting and the already-prefixed guard.
                     if (data.img && !data.img.src.startsWith(apiOrigin)) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
                     if (data.type == "private") {
-                      data.users.forEach((uid) => {
-                        if (uid != userID.current) {
-                          privateChats.current[uid] = data._id;
-                          data.sender = uid;
-                          requestProfile(uid);
-                        }
-                      });
+                      const other = data.users.find((uid) => uid != userID.current);
+                      // A "message yourself" chat has every entry in `users`
+                      // equal to your own id - the loop above never finds an
+                      // "other" party, so `sender` (what every downstream
+                      // profile/name lookup keys off) was left unset, which
+                      // is why this chat rendered as "Unnamed" with no way
+                      // to resolve a display name or avatar for it.
+                      const uid = other != null ? other : userID.current;
+                      privateChats.current[uid] = data._id;
+                      data.sender = uid;
+                      requestProfile(uid);
                     } else if (datagroup.type == "join") {
                       user.Chats.push(data._id);
                       await db

@@ -24,9 +24,14 @@ export default function (props) {
   useEffect(()=>{
   if(chat.type=='private'){
     if(profiles[chat.sender]){
-      const user=profiles[chat.sender];
+      // A "message yourself" chat's sender is your own id, so this would
+      // otherwise merge (and, via the delete below, mutate) your own live
+      // profiles[] entry - copy it and label the chat distinctly instead of
+      // just showing your own name back at you.
+      const isSelf = chat.sender === userID.current;
+      const user = isSelf ? { ...profiles[chat.sender] } : profiles[chat.sender];
       delete user._id;
-      chat={...chat,...user}
+      chat={...chat,...user, ...(isSelf ? { name: "Saved Messages" } : {})}
       if(chatCache.current.chats[chat._id])
         chatCache.current.chats[chat._id]=chat;
      if(chatdata[chat._id])

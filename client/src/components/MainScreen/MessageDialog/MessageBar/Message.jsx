@@ -11,6 +11,7 @@ import del from "/delete.svg";
 import edit from "/edit.svg";
 import reactIcon from "/react.svg";
 import pinIcon from "/pin.svg";
+import tick from "/tick.svg";
 import { downloadFile } from "../../../../download";
 import { useToast } from "../../../ui/Toast";
 import Spinner from "../../../ui/Spinner";
@@ -44,6 +45,28 @@ const fileBadge = (contentType, name) =>
     label: (name || "").split(".").pop()?.slice(0, 3).toUpperCase() || "FILE",
     className: "bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-200",
   };
+
+// A CSS mask (not <img>) so a single black-stroke tick.svg can be tinted via
+// a plain text-color class - gray for delivered, accent purple for read -
+// instead of needing separate light/dark/read SVG variants.
+function Tick({ className = "" }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`inline-block w-2.5 h-2.5 bg-current shrink-0 ${className}`}
+      style={{
+        WebkitMaskImage: `url(${tick})`,
+        maskImage: `url(${tick})`,
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+      }}
+    />
+  );
+}
 
 export default function (props) {
   const { profiles, requestProfile, db, userID, Messages, setMessages, chatID, socket, starred, toggleStar, chatdata, pinMessage, unpinMessage, reactMessage, report } = useCtx();
@@ -376,7 +399,16 @@ export default function (props) {
                       className="w-3.5 h-3.5 rounded-full bg-red-500 text-white flex items-center justify-center text-[0.55rem] font-bold leading-none shrink-0"
                     >!</button>
                   ) : (
-                    <span className={messageItem.status === "✔✔" ? "text-[var(--accent-dark)]" : ""}>{messageItem.status}</span>
+                    <span className={`inline-flex items-center ${messageItem.status === "✔✔" ? "text-[var(--accent-dark)]" : "text-gray-400"}`}>
+                      {messageItem.status === "✔✔" ? (
+                        <span className="relative inline-block w-3.5 h-2.5">
+                          <Tick className="absolute left-0" />
+                          <Tick className="absolute left-1" />
+                        </span>
+                      ) : (
+                        <Tick />
+                      )}
+                    </span>
                   ))}
                 </span>
               );
