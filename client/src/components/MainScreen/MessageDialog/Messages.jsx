@@ -102,7 +102,7 @@ export default function MessageDialog(props) {
       }
       rows.push(
         <Message
-          key={message._id}
+          key={message.clientId || message._id}
           item={message}
           setDialog={props.setDialog}
           setReply={setReply}

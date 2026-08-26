@@ -171,6 +171,12 @@ function ChatScreen(props) {
                 let dat = stream.data;
                 await Promise.all(
                   dat.map(async (data) => {
+                    // Carry the pending message's temp id forward as a stable
+                    // React key across the optimistic-to-permanent swap below -
+                    // otherwise Message.jsx remounts (its key, message._id,
+                    // changes from the temp id to the real one), replaying its
+                    // mount-in animation on an element that was already visible.
+                    if (stream.replace) data.clientId = stream.replace;
                     await db
                       .transaction("messages", "readwrite")
                       .objectStore("messages")
