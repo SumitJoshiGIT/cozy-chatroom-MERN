@@ -472,19 +472,6 @@ export default function (props) {
                 ))}
               </div>
             )}
-
-            {props.replyCount > 0 && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); props.onOpenThread && props.onOpenThread(); }}
-                className="mt-1 flex items-center gap-1 text-xs font-medium text-[var(--accent-dark)] dark:text-[var(--accent)] hover:underline"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 4h16v12H7l-3 3z" />
-                </svg>
-                {props.replyCount} {props.replyCount === 1 ? "reply" : "replies"}
-              </button>
-            )}
           </div>
         </div>
         {showReactions && (
@@ -518,18 +505,6 @@ export default function (props) {
             <img src={reply} className="w-4 h-4 dark:invert dark:opacity-80"></img>
             <div>Reply</div>
           </button>
-
-          {props.onOpenThread && (
-            <button
-              onClick={(e) => { contextref.current.style.display = "none"; props.onOpenThread(); }}
-              className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
-                <path d="M4 4h16v12H7l-3 3z" />
-              </svg>
-              <div>{props.replyCount > 0 ? "View thread" : "Reply in thread"}</div>
-            </button>
-          )}
 
           <button
             onClick={copyHandle}
