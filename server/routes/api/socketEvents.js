@@ -404,6 +404,28 @@ async function onConnection(socket, io) {
         console.log(err);
       }
     });
+
+    // In-chat search (different from "search" above, which finds which chat
+    // has a match - this returns every matching message inside one specific
+    // chat, for next/prev jump navigation).
+    socket.on("searchMessagesInChat", async ({ cid, query, reqId }) => {
+      if (!cid || !chatSet.has(cid) || !query) {
+        socket.emit("searchMessagesInChat", { cid, results: [], reqId });
+        return;
+      }
+      try {
+        const escaped = xss(`${query}`).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const term = new RegExp(escaped, "i");
+        const results = await models.MessagesModel.find(
+          { chat: cid, content: { $regex: term } },
+          "_id mid content createdAt uid"
+        ).sort({ mid: 1 }).limit(100);
+        socket.emit("searchMessagesInChat", { cid, results, reqId });
+      } catch (err) {
+        console.log(err);
+      }
+    });
+
     socket.on("report", async ({ id, targetType, reason }) => {
       if (!id || !["user", "chat", "message"].includes(targetType)) return;
       try {

@@ -12,6 +12,9 @@ import back from '/back-one.svg'
 import close from '/close.svg'
 import forwardIcon from '/forward.svg'
 import copyIcon from '/copy.svg'
+import searchIcon from '/search.svg'
+import up from '/up.svg'
+import down from '/down.svg'
 import { WALLPAPERS } from '../../../../wallpaper'
 
 
@@ -122,6 +125,29 @@ export default function (props){
           )}
         </div>
       </div>
+      ) : props.chatSearchOpen ? (
+      <div className="w-full shadow-sm border-b dark:border-gray-700 p-2 pl-4 justify-between items-center h-14 bg-white dark:bg-gray-800 flex gap-2">
+        <img src={searchIcon} className="w-4 h-4 opacity-50 dark:invert shrink-0" alt="" />
+        <input
+          autoFocus
+          value={props.chatSearchQuery}
+          onChange={(e) => props.onChatSearchChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); props.onChatSearchNext(); }
+            if (e.key === 'Escape') props.onToggleChatSearch();
+          }}
+          placeholder="Search in this chat"
+          className="flex-1 min-w-0 outline-none bg-transparent text-sm text-gray-700 dark:text-gray-100 placeholder-gray-400"
+        />
+        {props.chatSearchQuery && (
+          <span className="text-xs text-gray-400 shrink-0 tabular-nums">
+            {props.chatSearchResults.length > 0 ? `${props.chatSearchIndex + 1}/${props.chatSearchResults.length}` : '0/0'}
+          </span>
+        )}
+        <IconButton icon={up} alt="Previous match" size="sm" disabled={props.chatSearchIndex <= 0} onClick={props.onChatSearchPrev} />
+        <IconButton icon={down} alt="Next match" size="sm" disabled={props.chatSearchIndex >= props.chatSearchResults.length - 1} onClick={props.onChatSearchNext} />
+        <IconButton icon={close} alt="Close search" onClick={props.onToggleChatSearch} />
+      </div>
       ) : (
       <div className="  w-full shadow-sm  border-b dark:border-gray-700  p-2   pl-4 justify-between items-center  h-14 bg-white dark:bg-gray-800 flex">
 
@@ -146,7 +172,9 @@ export default function (props){
         </div>
         <div className="flex items-center">
         {showJoin&&<Button variant="primary" className="mr-2 w-24" onClick={()=>{socket.current.emit("join",[chatID.id])}}>Join</Button>}
-   
+
+        <IconButton icon={searchIcon} alt="Search in chat" className="mr-1" onClick={props.onToggleChatSearch} />
+
         <IconButton icon={options} alt="Options" onClick={()=>{
             if(option.current){
               option.current.classList.toggle('hidden')

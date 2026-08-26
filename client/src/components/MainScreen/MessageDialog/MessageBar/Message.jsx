@@ -276,6 +276,7 @@ export default function (props) {
               ? `rounded-[1.15rem] ${grouped ? "rounded-tr-[1.15rem]" : "rounded-tr-md"}`
               : `rounded-[1.15rem] ${grouped ? "rounded-tl-[1.15rem]" : "rounded-tl-md"}`}
             ${props.selected ? "ring-2 ring-[var(--accent)]" : ""}
+            ${props.highlighted ? "ring-2 ring-amber-400 transition-shadow duration-300" : ""}
           `}
         >
           <div>

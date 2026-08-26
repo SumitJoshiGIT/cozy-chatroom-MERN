@@ -38,10 +38,94 @@ export default function MessageDialog(props) {
     });
   }, []);
 
+  // In-chat search - finds every matching message inside the open chat
+  // (server-side, so it isn't limited to whatever's already loaded locally)
+  // with next/prev jump navigation, distinct from the sidebar's global
+  // "which chat has this" search in SearchBar.jsx.
+  const [chatSearchOpen, setChatSearchOpen] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState("");
+  const [chatSearchResults, setChatSearchResults] = useState([]);
+  const [chatSearchIndex, setChatSearchIndex] = useState(0);
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  const chatSearchDebounce = useRef(null);
+  const chatSearchReqId = useRef(0);
+  const pendingJumpRef = useRef(null);
+  const highlightTimerRef = useRef(null);
+
+  useEffect(() => {
+    const handler = (data) => {
+      if (data.cid !== chatID.id || data.reqId !== chatSearchReqId.current) return;
+      setChatSearchResults(data.results || []);
+      setChatSearchIndex(0);
+    };
+    socket.current.on("searchMessagesInChat", handler);
+    return () => socket.current.off("searchMessagesInChat", handler);
+  }, [chatID.id]);
+
+  const jumpToMatch = useCallback((match) => {
+    if (!match) return;
+    const el = document.getElementById(match._id);
+    clearTimeout(highlightTimerRef.current);
+    if (el) {
+      el.scrollIntoView({ block: "center" });
+      setHighlightedMessageId(match._id);
+      highlightTimerRef.current = setTimeout(() => setHighlightedMessageId(null), 1500);
+      pendingJumpRef.current = null;
+      return;
+    }
+    // Not currently loaded (older than what's been paginated in) - fetch a
+    // window ending just past this message; the effect below retries the
+    // scroll once that batch lands in Messages[chatID.id].
+    pendingJumpRef.current = match;
+    socket.current.emit("messages", { cid: chatID.id, mode: "before", cursorMid: match.mid + 1 });
+  }, [chatID.id]);
+
+  const runChatSearch = useCallback((query) => {
+    setChatSearchQuery(query);
+    clearTimeout(chatSearchDebounce.current);
+    if (!query.trim()) {
+      setChatSearchResults([]);
+      setChatSearchIndex(0);
+      return;
+    }
+    chatSearchDebounce.current = setTimeout(() => {
+      chatSearchReqId.current += 1;
+      socket.current.emit("searchMessagesInChat", { cid: chatID.id, query: query.trim(), reqId: chatSearchReqId.current });
+    }, 250);
+  }, [chatID.id]);
+
+  const goToSearchIndex = useCallback((idx) => {
+    if (idx < 0 || idx >= chatSearchResults.length) return;
+    setChatSearchIndex(idx);
+    jumpToMatch(chatSearchResults[idx]);
+  }, [chatSearchResults, jumpToMatch]);
+
+  // Jump to the first (most recent, since results sort ascending by mid -
+  // last is most recent) match as soon as a fresh result set lands.
+  useEffect(() => {
+    if (chatSearchResults.length > 0) jumpToMatch(chatSearchResults[0]);
+  }, [chatSearchResults]);
+
+  const toggleChatSearch = useCallback(() => {
+    setChatSearchOpen((prev) => {
+      if (prev) {
+        setChatSearchQuery("");
+        setChatSearchResults([]);
+        setChatSearchIndex(0);
+      }
+      return !prev;
+    });
+  }, []);
+
   useEffect(() => {
     setWallpaper(getWallpaper(chatID.id));
     cancelSelection();
     setPinIndex(0);
+    setChatSearchOpen(false);
+    setChatSearchQuery("");
+    setChatSearchResults([]);
+    setChatSearchIndex(0);
+    setHighlightedMessageId(null);
   }, [chatID.id]);
 
   const onScroll = useCallback(
@@ -57,6 +141,21 @@ export default function MessageDialog(props) {
   useEffect(() => {
     if (chatID.id) socket.current.emit("markSeen", { cid: chatID.id });
   }, [chatID.id, m]);
+
+  // Retries a jumpToMatch() that found its target not yet loaded, once the
+  // "before" fetch it triggered lands here.
+  useEffect(() => {
+    const match = pendingJumpRef.current;
+    if (!match) return;
+    const el = document.getElementById(match._id);
+    if (el) {
+      el.scrollIntoView({ block: "center" });
+      setHighlightedMessageId(match._id);
+      clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = setTimeout(() => setHighlightedMessageId(null), 1500);
+      pendingJumpRef.current = null;
+    }
+  }, [m]);
 
   // Lazy load: only fetch a chat's history once it's actually opened, and
   // only if we don't already have it - a chat with unread messages already
@@ -172,6 +271,7 @@ export default function MessageDialog(props) {
           selected={selectedIds.has(message._id)}
           onEnterSelection={enterSelection}
           onToggleSelect={toggleSelect}
+          highlighted={highlightedMessageId === message._id}
         />
       );
       pre = message.uid;
@@ -198,6 +298,14 @@ export default function MessageDialog(props) {
           onDeleteSelected={deleteSelected}
           onCopySelected={copySelected}
           canCopySelected={selectedMessages.length === 1 && !!selectedMessages[0].content}
+          chatSearchOpen={chatSearchOpen}
+          onToggleChatSearch={toggleChatSearch}
+          chatSearchQuery={chatSearchQuery}
+          onChatSearchChange={runChatSearch}
+          chatSearchResults={chatSearchResults}
+          chatSearchIndex={chatSearchIndex}
+          onChatSearchNext={() => goToSearchIndex(chatSearchIndex + 1)}
+          onChatSearchPrev={() => goToSearchIndex(chatSearchIndex - 1)}
         />
       )}
       {chatID.id && activePinned && (
