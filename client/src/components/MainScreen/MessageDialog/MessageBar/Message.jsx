@@ -16,6 +16,7 @@ import { downloadFile } from "../../../../download";
 import { useToast } from "../../../ui/Toast";
 import Spinner from "../../../ui/Spinner";
 import VoiceNote from "./VoiceNote";
+import MediaViewer from "./MediaViewer";
 // Leaflet (pulled in by LocationMessage) is ~150kB gzipped on its own and
 // only ever needed for the rare message that actually shares a location -
 // split it into its own chunk instead of shipping it in everyone's initial
@@ -72,6 +73,7 @@ export default function (props) {
   const { profiles, requestProfile, db, userID, Messages, setMessages, chatID, socket, starred, toggleStar, chatdata, pinMessage, unpinMessage, reactMessage, report } = useCtx();
   const contextref = useRef();
   const [showReactions, setShowReactions] = useState(false);
+  const [mediaPreview, setMediaPreview] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const longPressTimer = useRef(null);
   const toast = useToast();
@@ -339,21 +341,45 @@ export default function (props) {
 
             {messageItem.attachments && messageItem.attachments.length > 0 && (
               <div className="flex flex-wrap gap-1 mb-1">
-                {messageItem.attachments.map((a, idx) =>
-                  (a.contentType || "").startsWith("image/") ? (
-                    <a key={idx} href={`${apiOrigin}/${a.src}`} target="_blank" rel="noreferrer">
-                      <img src={`${apiOrigin}/${a.src}`} alt={a.name} className="max-h-40 max-w-52 rounded-2xl object-cover" />
-                    </a>
+                {messageItem.attachments.map((a, idx) => {
+                  const src = `${apiOrigin}/${a.src}`;
+                  return (a.contentType || "").startsWith("image/") ? (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setMediaPreview({ type: "image", src, name: a.name })}
+                    >
+                      <img src={src} alt={a.name} className="max-h-40 max-w-52 rounded-2xl object-cover" />
+                    </button>
                   ) : (a.contentType || "").startsWith("video/") ? (
-                    <video key={idx} src={`${apiOrigin}/${a.src}`} controls className="max-h-40 max-w-52 rounded-2xl" />
+                    <div key={idx} className="relative">
+                      <video src={src} controls className="max-h-40 max-w-52 rounded-2xl" />
+                      {/* Native <video controls> would swallow this click if
+                          it covered the whole element - keep it a small
+                          corner button so the inline scrub bar/play button
+                          stay fully usable for quick playback. */}
+                      <button
+                        type="button"
+                        onClick={() => setMediaPreview({ type: "video", src, name: a.name })}
+                        aria-label="Open in theater view"
+                        title="Expand"
+                        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                        </svg>
+                      </button>
+                    </div>
                   ) : (a.contentType || "").startsWith("audio/") ? (
-                    <VoiceNote key={idx} src={`${apiOrigin}/${a.src}`} />
+                    <VoiceNote key={idx} src={src} />
                   ) : (
                     <button
                       key={idx}
                       type="button"
                       onClick={() =>
-                        downloadFile(`${apiOrigin}/${a.src}`, a.name).catch(() => toast.error("Couldn't download file"))
+                        a.contentType === "application/pdf"
+                          ? setMediaPreview({ type: "pdf", src, name: a.name })
+                          : downloadFile(src, a.name).catch(() => toast.error("Couldn't download file"))
                       }
                       className="flex items-center gap-2.5 w-52 px-2.5 py-2 rounded-2xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-colors text-left"
                     >
@@ -370,8 +396,8 @@ export default function (props) {
                         <span className="block text-xs text-gray-500 dark:text-gray-400">{formatSize(a.size)}</span>
                       </span>
                     </button>
-                  )
-                )}
+                  );
+                })}
               </div>
             )}
 
@@ -446,6 +472,19 @@ export default function (props) {
                 ))}
               </div>
             )}
+
+            {props.replyCount > 0 && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); props.onOpenThread && props.onOpenThread(); }}
+                className="mt-1 flex items-center gap-1 text-xs font-medium text-[var(--accent-dark)] dark:text-[var(--accent)] hover:underline"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 4h16v12H7l-3 3z" />
+                </svg>
+                {props.replyCount} {props.replyCount === 1 ? "reply" : "replies"}
+              </button>
+            )}
           </div>
         </div>
         {showReactions && (
@@ -479,6 +518,19 @@ export default function (props) {
             <img src={reply} className="w-4 h-4 dark:invert dark:opacity-80"></img>
             <div>Reply</div>
           </button>
+
+          {props.onOpenThread && (
+            <button
+              onClick={(e) => { contextref.current.style.display = "none"; props.onOpenThread(); }}
+              className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
+                <path d="M4 4h16v12H7l-3 3z" />
+              </svg>
+              <div>{props.replyCount > 0 ? "View thread" : "Reply in thread"}</div>
+            </button>
+          )}
+
           <button
             onClick={copyHandle}
             className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -555,6 +607,7 @@ export default function (props) {
           <img src={reactIcon} className="w-3.5 h-3.5 opacity-70 dark:invert" alt="" />
         </button>
       </div>
+      {mediaPreview && <MediaViewer item={mediaPreview} onClose={() => setMediaPreview(null)} />}
     </div>
   );
 }
