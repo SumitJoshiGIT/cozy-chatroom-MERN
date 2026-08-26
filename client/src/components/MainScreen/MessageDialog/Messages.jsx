@@ -16,7 +16,7 @@ import pinIcon from "/pin.svg";
 import { getWallpaper, setWallpaperFor } from "../../../wallpaper";
 import Spinner from "../../ui/Spinner";
 export default function MessageDialog(props) {
-  const { Messages, chatID, scrollable, socket, chatdata, userID, profiles, unpinMessage, loadedChats } = useCtx();
+  const { Messages, setMessages, chatID, scrollable, socket, chatdata, userID, profiles, db, unpinMessage, loadedChats } = useCtx();
   const [pinIndex, setPinIndex] = useState(0);
   const [reply, setReply] = useState();
   const [edit, setEdit] = useState();
@@ -51,6 +51,7 @@ export default function MessageDialog(props) {
   const chatSearchReqId = useRef(0);
   const pendingJumpRef = useRef(null);
   const highlightTimerRef = useRef(null);
+  const pendingPinFetch = useRef(new Set());
 
   useEffect(() => {
     const handler = (data) => {
@@ -126,6 +127,7 @@ export default function MessageDialog(props) {
     setChatSearchResults([]);
     setChatSearchIndex(0);
     setHighlightedMessageId(null);
+    pendingPinFetch.current.clear();
   }, [chatID.id]);
 
   const onScroll = useCallback(
@@ -209,6 +211,36 @@ export default function MessageDialog(props) {
   const pinnedIds = chat.pinned || [];
   const activePinIndex = pinnedIds.length ? Math.min(pinIndex, pinnedIds.length - 1) : 0;
   const activePinned = pinnedIds.length ? messagesById[pinnedIds[activePinIndex]] : null;
+
+  // A pinned message is very often older than whatever's currently
+  // lazy-loaded (that's the point of pinning something for later) - without
+  // this, activePinned above resolves to undefined and the whole pin bar
+  // silently fails to render, with no indication anything is pinned at all.
+  useEffect(() => {
+    if (!chatID.id || chatID.type === "user" || pinnedIds.length === 0) return;
+    const missing = pinnedIds.filter((id) => !messagesById[id] && !pendingPinFetch.current.has(id));
+    if (missing.length === 0) return;
+    missing.forEach((id) => pendingPinFetch.current.add(id));
+    socket.current.emit("getMessagesByIds", { cid: chatID.id, ids: missing });
+  }, [chatID.id, pinnedIds.join(","), messagesById]);
+
+  useEffect(() => {
+    const handler = ({ cid, results }) => {
+      if (cid !== chatID.id || !results || !results.length) return;
+      results.forEach((msg) => pendingPinFetch.current.delete(msg._id.toString()));
+      setMessages((prev) => {
+        const chatStore = { ...(prev[cid] || {}) };
+        results.forEach((msg) => { chatStore[msg.mid] = msg; });
+        return { ...prev, [cid]: chatStore };
+      });
+      if (db) {
+        results.forEach((msg) => db.transaction("messages", "readwrite").objectStore("messages").put(msg));
+      }
+    };
+    socket.current.on("getMessagesByIds", handler);
+    return () => socket.current.off("getMessagesByIds", handler);
+  }, [chatID.id, db, setMessages]);
+
   const pinnedPreview = (message) => {
     if (!message) return "Pinned message";
     if (message.content) return message.content;
@@ -272,6 +304,7 @@ export default function MessageDialog(props) {
           onEnterSelection={enterSelection}
           onToggleSelect={toggleSelect}
           highlighted={highlightedMessageId === message._id}
+          jumpToMessage={jumpToMatch}
         />
       );
       pre = message.uid;
@@ -318,10 +351,7 @@ export default function MessageDialog(props) {
             >‹</button>
           )}
           <div
-            onClick={() => {
-              const element = document.getElementById(activePinned._id);
-              if (element) element.scrollIntoView({ block: "center" });
-            }}
+            onClick={() => jumpToMatch(activePinned)}
             className="flex-1 min-w-0 cursor-pointer"
           >
             <div className="text-[var(--accent-dark)] dark:text-[var(--accent)] font-semibold truncate">

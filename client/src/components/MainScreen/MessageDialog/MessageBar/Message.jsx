@@ -291,10 +291,7 @@ export default function (props) {
 
             {repliedMessage ? (
               <div
-                onClick={() => {
-                  const element = document.getElementById(props.reply_to);
-                  if (element) element.scrollIntoView({ block: "center" });
-                }}
+                onClick={() => props.jumpToMessage && props.jumpToMessage(repliedMessage)}
                 className="cursor-pointer flex flex-col overflow-clip rounded-md pl-2 py-1 mb-1 bg-black/5 border-l-2 text-xs"
                 style={{ borderColor: repliedProfile.color || '#a78bfa' }}
               >

@@ -426,6 +426,24 @@ async function onConnection(socket, io) {
       }
     });
 
+    // Fetches specific messages by id regardless of pagination state - the
+    // pinned-messages bar needs this, since a pinned message is very often
+    // older than whatever's currently lazy-loaded and would otherwise never
+    // resolve to anything the client can render a preview for.
+    socket.on("getMessagesByIds", async ({ cid, ids }) => {
+      if (!cid || !chatSet.has(cid) || !Array.isArray(ids) || ids.length === 0) return;
+      try {
+        const results = await models.MessagesModel.aggregate([
+          { $match: { _id: { $in: ids.map((id) => new ObjectID(id)) }, chat: new ObjectID(cid) } },
+          { $lookup: { from: "messages", localField: "reply_to", foreignField: "_id", as: "replyToMessage" } },
+          { $unwind: { path: "$replyToMessage", preserveNullAndEmptyArrays: true } },
+        ]);
+        socket.emit("getMessagesByIds", { cid, results });
+      } catch (err) {
+        console.log(err);
+      }
+    });
+
     socket.on("report", async ({ id, targetType, reason }) => {
       if (!id || !["user", "chat", "message"].includes(targetType)) return;
       try {
