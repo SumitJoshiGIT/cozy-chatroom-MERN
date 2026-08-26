@@ -1,6 +1,7 @@
 import MessageBar from "./MessageBar/MessageBar";
 import Message from "./MessageBar/Message";
 import ForwardDialog from "./ForwardDialog";
+import ThreadPanel from "./ThreadPanel";
 import React, {
   useRef,
   useEffect,
@@ -21,6 +22,7 @@ export default function MessageDialog(props) {
   const [reply, setReply] = useState();
   const [edit, setEdit] = useState();
   const [forward, setForward] = useState();
+  const [threadRoot, setThreadRoot] = useState(null);
   const [wallpaper, setWallpaper] = useState(() => getWallpaper(chatID.id));
   // Selection mode - the right-click menu's alternative for touch (long-
   // press) and mouse (a hover checkbox) alike. Lives here, not in Message
@@ -128,6 +130,7 @@ export default function MessageDialog(props) {
     setChatSearchIndex(0);
     setHighlightedMessageId(null);
     pendingPinFetch.current.clear();
+    setThreadRoot(null);
   }, [chatID.id]);
 
   const onScroll = useCallback(
@@ -184,6 +187,30 @@ export default function MessageDialog(props) {
     if (m) Object.values(m).forEach((message) => { byId[message._id] = message; });
     return byId;
   }, [m]);
+
+  // Threads aren't a separate data model - a message "has a thread" simply
+  // because at least one other (locally loaded) message's reply_to points
+  // at it. This can undercount vs. the server's authoritative getThread
+  // result for a message whose replies haven't been paginated in yet, but
+  // that's fine here - it's only used to decide whether to show a "N
+  // replies" affordance at all, and ThreadPanel always fetches the real
+  // count once opened.
+  const replyCounts = useMemo(() => {
+    const counts = {};
+    if (m) Object.values(m).forEach((message) => {
+      if (message.reply_to) counts[message.reply_to] = (counts[message.reply_to] || 0) + 1;
+    });
+    return counts;
+  }, [m]);
+
+  const threadMessageProps = useMemo(() => ({
+    setDialog: props.setDialog,
+    infoPanel: props.infoPanel,
+    setReply,
+    setEdit,
+    setForward,
+    jumpToMessage: jumpToMatch,
+  }), [props.setDialog, props.infoPanel, jumpToMatch]);
 
   const selectedMessages = useMemo(
     () => Array.from(selectedIds).map((id) => messagesById[id]).filter(Boolean),
@@ -305,6 +332,8 @@ export default function MessageDialog(props) {
           onToggleSelect={toggleSelect}
           highlighted={highlightedMessageId === message._id}
           jumpToMessage={jumpToMatch}
+          replyCount={replyCounts[message._id] || 0}
+          onOpenThread={() => setThreadRoot(message)}
         />
       );
       pre = message.uid;
@@ -404,6 +433,13 @@ export default function MessageDialog(props) {
         />
       )}
       {forward && <ForwardDialog items={forward} onClose={() => setForward()} />}
+      {threadRoot && (
+        <ThreadPanel
+          root={messagesById[threadRoot._id] || threadRoot}
+          onClose={() => setThreadRoot(null)}
+          messageProps={threadMessageProps}
+        />
+      )}
     </div>
   );
 }
