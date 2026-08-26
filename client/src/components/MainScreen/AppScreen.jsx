@@ -134,10 +134,20 @@ function ChatScreen(props) {
         .get("user");
       let user = {};
 
-      userconn.onsuccess = async (event) => {
-        if (event.srcElement.result) {
-          user = { ...(event.srcElement.result.data || {}), ...user };
-         // console.log(user);
+      let sessionStarted = false;
+      // Runs the full chat-session setup (socket listeners, IndexedDB reads,
+      // the initial "chats"/"contacts" sync) exactly once, however the user
+      // record first becomes available: from a cached IndexedDB record
+      // (returning user, reload) or from the "auth" socket event itself
+      // (a brand-new user's very first login, before anything is cached
+      // locally). Previously this only ran from the IndexedDB-cache path, so
+      // a first-time login - no cached record yet - never registered the
+      // "chat" listener or emitted the sync request at all, leaving the
+      // chat list spinning forever until a reload populated the cache.
+      const startSession = () => {
+        if (sessionStarted) return;
+        sessionStarted = true;
+        {
           const user_id = user._id;
           setProfiles({ [user_id]: user });
 
@@ -578,6 +588,13 @@ function ChatScreen(props) {
         }
       };
 
+      userconn.onsuccess = async (event) => {
+        if (event.srcElement.result) {
+          user = { ...(event.srcElement.result.data || {}), ...user };
+          startSession();
+        }
+      };
+
       socket.current.on("auth", async (data) => {
         user = { ...user, ...data };
         if (data) {
@@ -606,6 +623,10 @@ function ChatScreen(props) {
           console.log(lastupdated);
           userID.current = user_id;
           console.log("Connected as:", user_id);
+          // No-op if the IndexedDB-cache path (userconn.onsuccess above)
+          // already ran startSession - this is the first-login path, where
+          // there was no cached record for it to find.
+          startSession();
         } else {
           socket.current.disconnect();
           navigate("/auth/signin");
