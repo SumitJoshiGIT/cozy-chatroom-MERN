@@ -82,7 +82,14 @@ function ChatScreen(props) {
           db.createObjectStore("profiles", { keyPath: "_id" });
         if (!names.contains("messages"))
           db.createObjectStore("messages", { keyPath: "_id" });
-        setDb(event.target.result);
+        // Don't setDb() here - the versionchange transaction this callback
+        // runs in hasn't committed yet. Setting it here used to trigger a
+        // re-render whose effect immediately opened a *second* transaction
+        // on the same handle while the first was still active, throwing
+        // "A version change transaction is running" for every brand-new
+        // user (empty IndexedDB, so onupgradeneeded always fires). onsuccess
+        // below always fires after this completes, so it's the only place
+        // that needs to set db.
         console.log("IndexedDB has been created or upgraded");
       };
 
