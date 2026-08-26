@@ -127,6 +127,10 @@ async function onConnection(socket, io) {
   if (profile) {
     const chatSet = new Set(profile.Chats.map((chat) => chat.toString()));
     chatSet.forEach((id)=>socket.join(id))
+    // A personal room, independent of any chat room, so another user's
+    // socket can be notified the instant they're added to a brand-new
+    // chat - before they've ever joined that chat's own room.
+    socket.join(`user:${profile._id}`);
 
     socket.use((stream, next) => {
      // console.log(1);
@@ -812,6 +816,16 @@ async function onConnection(socket, io) {
         data.sender = stream.cid;
         socket.join(data._id.toString());
         socket.emit(`private.${stream.cid}`,data);
+        // Recipient's Chats array is already updated above, but they'd
+        // otherwise only discover this chat on their next reconnect or
+        // periodic resync (or a manual reload) - push it live if they're
+        // already connected, same as a group invite below. Also join their
+        // live socket(s) to the chat's own room now, not just at their next
+        // connection - otherwise this first message (and any sent before
+        // they reload) would still silently miss them, since io.to(cid)
+        // below only reaches sockets already in that room.
+        await io.in(`user:${user._id}`).socketsJoin(data._id.toString());
+        io.to(`user:${user._id}`).emit("chat", { type: "chats", chats: [data] });
         // A file-only first message (no text) has falsy stream.content -
         // guarding on it alone silently dropped every such message.
         if (stream.content || (Array.isArray(stream.attachments) && stream.attachments.length))
@@ -844,12 +858,28 @@ async function onConnection(socket, io) {
         chat = await chat.save();
       }
       for (const id of users) {
+        if (id.toString() === profile._id.toString()) continue;
         let user = await models.UsersModel.findByIdAndUpdate((id), {
           $push: { Chats: chat._id },
         });
-        if (user) socket.to(id.toString()).emit(`private.${id}`, chat);
+        // Previously targeted a room named after the recipient's user id,
+        // which no socket ever joins (only chat-id rooms and the personal
+        // "user:<id>" room above are joined) - so this never delivered,
+        // and every other member had to wait for reconnect/periodic resync
+        // or a manual reload to see a group they were just added to. Also
+        // join their live socket(s) to the new chat's room immediately, or
+        // messages sent before their next reload/reconnect would still miss
+        // them - see the matching comment in createChatPrivate above.
+        if (user) {
+          await io.in(`user:${id}`).socketsJoin(chat._id.toString());
+          io.to(`user:${id}`).emit("chat", { type: "chats", chats: [chat] });
+        }
       }
       profile.Chats.push((chat._id));
+      // The loop above now skips the creator (they get the live-push/room-join
+      // treatment below instead, not the recipient-only handling), so unlike
+      // before, nothing else persists this to the DB - save it here.
+      await profile.save();
       chatSet.add(chat._id.toString());
       socket.join(chat._id.toString());
       socket.emit("chat", { type: "chats", chats: [chat] });
