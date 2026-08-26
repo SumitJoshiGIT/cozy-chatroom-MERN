@@ -26,7 +26,7 @@ const docTypes = [
 ];
 const acceptedTypes = [...imageTypes, ...videoTypes, ...audioTypes, ...docTypes];
 const MessageBar = React.memo((props) => {
-  const { setMessages, db, scrollable, userID, chatID, socket, emitTyping, chatdata, blocked, toggleBlock }=useCtx();
+  const { setMessages, db, scrollable, userID, chatID, socket, emitTyping, chatdata, blocked, toggleBlock, drafts, setDraft }=useCtx();
   const toast=useToast();
   const chat = chatdata[chatID.id] || {};
   const blockedOther = chat.type !== 'group' && chat.sender && blocked.has(chat.sender);
@@ -91,6 +91,26 @@ const MessageBar = React.memo((props) => {
     if (props.edit) setMessage(props.edit[0].content || "");
   }, [props.edit]);
 
+  // Draft: restore whatever was left unsent in this chat when it's opened,
+  // so switching chats mid-message doesn't lose it. Skipped while editing -
+  // that effect above owns `message` in that case.
+  const draftDebounce = useRef(null);
+  useEffect(() => {
+    if (props.edit) return;
+    setMessage(drafts[chatID.id] || "");
+    // Only on chat switch, not on every `drafts` update - otherwise this
+    // would immediately stomp on whatever the user is currently typing with
+    // the value the save-effect below just wrote back for this same chat.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatID.id]);
+
+  useEffect(() => {
+    clearTimeout(draftDebounce.current);
+    const cid = chatID.id;
+    draftDebounce.current = setTimeout(() => setDraft(cid, message), 400);
+    return () => clearTimeout(draftDebounce.current);
+  }, [message]);
+
   function saveEdit(event) {
     event.preventDefault();
     if (!message.trim()) return;
@@ -137,6 +157,8 @@ const MessageBar = React.memo((props) => {
     
     setMessage("");
     setFiles([]);
+    clearTimeout(draftDebounce.current);
+    setDraft(chatID.id, "");
 
     if (props.reply) props.setReply();
     if (scrollable.current) scrollable.current.scrollTo(0, scrollable.current.scrollHeight);

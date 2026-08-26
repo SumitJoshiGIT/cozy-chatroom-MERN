@@ -17,6 +17,7 @@ export default function (props) {
     privateChats,
     setMessageDialog,
     userID,
+    drafts,
   } = useCtx();
   
   const [chatid, setId] = useState(props.id);
@@ -88,6 +89,7 @@ export default function (props) {
   const previewName = latest
     ? (latest.uid == userID.current ? "You" : (profiles[latest.uid] ? profiles[latest.uid].name : ""))
     : "";
+  const draft = drafts[chat._id];
 
   return (
     <div
@@ -119,7 +121,12 @@ export default function (props) {
               </span>
             )}
           </div>
-          {latest && (
+          {draft ? (
+            <div className="truncate text-sm">
+              <span className="text-red-500 dark:text-red-400">Draft: </span>
+              <span className="text-gray-500 dark:text-gray-400">{draft}</span>
+            </div>
+          ) : latest && (
             <div className="truncate text-sm text-gray-500">
               {previewName && (
                 <span

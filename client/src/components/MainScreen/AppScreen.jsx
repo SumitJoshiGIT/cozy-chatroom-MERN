@@ -13,6 +13,7 @@ import { io } from "socket.io-client";
 import { useNavigate } from "react-router-dom";
 import { apiOrigin } from "../../apiOrigin";
 import { captureAuthTokenFromUrl, getStoredAuthToken } from "../../socketAuthToken";
+import { readAllDrafts, persistDrafts } from "../../drafts";
 const Context = createContext();
 
 function ChatScreen(props) {
@@ -79,6 +80,22 @@ function ChatScreen(props) {
     // marked in-flight forever. Bound the worst case instead of blocking it.
     setTimeout(() => pendingProfileRequests.current.delete(uid), 8000);
   }, [profiles]);
+
+  // Per-chat unsent composer text, kept in top-level state (not just
+  // localStorage) so the sidebar's "Draft: ..." preview updates live as you
+  // type, not only after switching away and back.
+  const [drafts, setDrafts] = useState(() => readAllDrafts());
+  const setDraft = useCallback((chatId, text) => {
+    if (!chatId) return;
+    setDrafts((prev) => {
+      const next = { ...prev };
+      if (text) next[chatId] = text;
+      else delete next[chatId];
+      persistDrafts(next);
+      return next;
+    });
+  }, []);
+
   // Below this width the chat list and the open conversation are two
   // separate full-screen views (one at a time) instead of a side-by-side
   // split - matches Tailwind's `md` breakpoint, already used elsewhere.
@@ -660,6 +677,8 @@ function ChatScreen(props) {
         userID,
         profiles,
         requestProfile,
+        drafts,
+        setDraft,
         socket,
         db,
         chatdata,
