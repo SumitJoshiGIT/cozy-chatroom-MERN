@@ -63,13 +63,13 @@ export default function VoiceNote({ src }) {
   const progress = duration ? current / duration : 0;
 
   return (
-    <div className="flex items-center gap-2.5 w-56 px-2.5 py-2 rounded-2xl bg-black/5 dark:bg-white/10">
+    <div className="voice-note-card">
       <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
       <button
         type="button"
         onClick={toggle}
         aria-label={playing ? "Pause" : "Play"}
-        className="w-9 h-9 shrink-0 rounded-full bg-[var(--accent)] text-white flex items-center justify-center active:scale-95 transition-transform shadow-sm"
+        className="voice-note-play"
       >
         {playing ? (
           <svg width="13" height="13" viewBox="0 0 12 12" fill="currentColor"><rect width="3" height="12" /><rect x="7" width="3" height="12" /></svg>
@@ -94,7 +94,7 @@ export default function VoiceNote({ src }) {
             );
           })}
         </div>
-        <span className="text-[0.7rem] text-gray-500 dark:text-gray-400 tabular-nums">
+        <span className="voice-note-time">
           {formatTime(playing || current ? current : duration)}
         </span>
       </div>

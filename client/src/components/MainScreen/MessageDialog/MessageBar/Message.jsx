@@ -13,8 +13,11 @@ import { downloadFile } from "../../../../download";
 import { useToast } from "../../../ui/Toast";
 import Spinner from "../../../ui/Spinner";
 import VoiceNote from "./VoiceNote";
+import DocumentPreview from "./DocumentPreview";
 import LocationMessage from "./LocationMessage";
+import ConfirmDialog, { shouldConfirm } from "../../../ui/ConfirmDialog";
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+const EDIT_WINDOW_MS = 15 * 60 * 1000;
 const formatSize = (bytes) => {
   if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;
@@ -43,7 +46,9 @@ export default function (props) {
   const { profiles, db, userID, Messages, chatID, socket, starred, toggleStar, chatdata, pinMessage, unpinMessage, reactMessage, report } = useCtx();
   const contextref = useRef();
   const [showReactions, setShowReactions] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmation, setConfirmation] = useState(null);
   const toast = useToast();
   const messageItem = props.item;
   if (!messageItem.status) {
@@ -57,7 +62,9 @@ export default function (props) {
   // createdAt, not updatedAt - markSeen/reactions/edits bump updatedAt, which
   // used to make a message's displayed send-time jump to "now" whenever its
   // status flipped to read.
-  const time = new Date(messageItem.createdAt);
+  const time = new Date(
+    messageItem.createdAt || messageItem.time || messageItem.updatedAt
+  );
   const flag = messageItem.uid == userID.current;
   const repliedMessage = props.reply_to
     ? props.reply_data || messageItem.replyToMessage
@@ -65,7 +72,7 @@ export default function (props) {
   const repliedProfile = repliedMessage ? profiles[repliedMessage.uid] || {} : {};
 
   useEffect(() => {
-    if (messageItem.status == "⧖") {
+    if (messageItem.status == "⧖" && !messageItem.sendQueued) {
       console.log(
         "pending",
         chatID.type == "user" ? "createChatPrivate" : "sendMessage",
@@ -94,23 +101,32 @@ export default function (props) {
     }
   }, [profiles[messageItem.uid]]);
 
+  useEffect(() => {
+    const closeOtherMenus = (event) => {
+      if (event.detail !== messageItem._id) {
+        setContextOpen(false);
+        setShowReactions(false);
+      }
+    };
+    const closeOnOutsideClick = (event) => {
+      if (contextref.current && !contextref.current.contains(event.target)) {
+        setContextOpen(false);
+      }
+    };
+    window.addEventListener("lavender:close-message-menus", closeOtherMenus);
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => {
+      window.removeEventListener("lavender:close-message-menus", closeOtherMenus);
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+    };
+  }, [messageItem._id]);
+
+  const closeMenu = () => setContextOpen(false);
+
   const handleRight = (event) => {
     event.preventDefault();
-    let flag=0
-    if (contextref.current) {
-      contextref.current.style.display = "block";
-      document.addEventListener('click',function click(){
-        contextref.current.style.display='none';
-        document.removeEventListener('click',click);
-      })
-      
-      document.addEventListener('contextmenu',function rclick(event){
-        if(contextref.current.contains(event.target))contextref.current.style.display='none';
-        document.removeEventListener('contextmenu',rclick);
-      }) 
-    }
-    flag=1;
-    event.preventDefault();
+    window.dispatchEvent(new CustomEvent("lavender:close-message-menus", { detail: messageItem._id }));
+    setContextOpen(true);
   };
   const onClick = useCallback(() => {
     props.infoPanel.current = messageItem.uid;
@@ -127,7 +143,19 @@ export default function (props) {
     props.setForward([messageItem, profile]);
   };
   const reportHandle = () => {
-    report(messageItem._id, "message");
+    const proceed = () => {
+      report(messageItem._id, "message");
+      setConfirmation(null);
+    };
+    if (shouldConfirm("report-message")) {
+      setConfirmation({
+        action: "report-message",
+        title: "Report this message?",
+        message: "Tell us what is concerning about this message.",
+        reasonPrompt: "Reason for reporting (optional)",
+        onConfirm: proceed,
+      });
+    } else proceed();
   };
   const editHandle = () => {
     props.setEdit([messageItem]);
@@ -145,15 +173,30 @@ export default function (props) {
   const reactHandle = (emoji) => {
     reactMessage(messageItem._id, chatID.id, emoji);
     setShowReactions(false);
+    closeMenu();
   };
   const myReaction = (messageItem.reactions||[]).find(r => (r.users||[]).includes(userID.current));
+  const canEdit = flag && messageItem.content && Date.now() - time.getTime() <= EDIT_WINDOW_MS;
   const deleteHandle = () => {
-    setDeleting(true);
-    socket.current.emit("deleteMessage", [
-      messageItem.mid,
-      messageItem._id,
-      messageItem.chat,
-    ]);
+    const proceed = () => {
+      setDeleting(true);
+      socket.current.emit("deleteMessage", [
+        messageItem.mid,
+        messageItem._id,
+        messageItem.chat,
+      ]);
+      setConfirmation(null);
+    };
+    if (shouldConfirm("delete-message")) {
+      setConfirmation({
+        action: "delete-message",
+        title: "Delete this message?",
+        message: "This removes the message from this conversation.",
+        confirmLabel: "Delete",
+        danger: true,
+        onConfirm: proceed,
+      });
+    } else proceed();
   };
 
   const grouped = props.pre == messageItem.uid;
@@ -174,14 +217,14 @@ export default function (props) {
         )}
       </div>
 
-      <div onContextMenu={handleRight} className="relative max-w-[75%] md:max-w-[60%]">
+      <div onContextMenu={handleRight} className="relative group max-w-[75%] md:max-w-[60%]">
         {deleting && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/30 rounded-2xl z-10">
             <Spinner size="sm" />
           </div>
         )}
         <div
-          className={`px-2.5 py-1.5 shadow-sm relative
+          className={`message-bubble px-2.5 py-1.5 shadow-sm relative
             ${flag ? "bg-[#DCF8C6] dark:bg-[#245a4b] dark:text-gray-100" : "bg-white dark:bg-gray-700 dark:text-gray-100"}
             ${flag
               ? `rounded-2xl ${grouped ? "rounded-tr-2xl" : "rounded-tr-md"}`
@@ -236,27 +279,17 @@ export default function (props) {
                   ) : (a.contentType || "").startsWith("audio/") ? (
                     <VoiceNote key={idx} src={`${apiOrigin}/${a.src}`} />
                   ) : (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() =>
-                        downloadFile(`${apiOrigin}/${a.src}`, a.name).catch(() => toast.error("Couldn't download file"))
-                      }
-                      className="flex items-center gap-2.5 w-52 px-2.5 py-2 rounded-2xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-colors text-left"
-                    >
-                      {(() => {
-                        const badge = fileBadge(a.contentType, a.name);
-                        return (
-                          <span className={`w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-[0.6rem] font-bold tracking-tight ${badge.className}`}>
-                            {badge.label}
-                          </span>
-                        );
-                      })()}
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">{a.name}</span>
-                        <span className="block text-xs text-gray-500 dark:text-gray-400">{formatSize(a.size)}</span>
-                      </span>
-                    </button>
+                    <div key={idx} className="w-64">
+                      <DocumentPreview
+                        src={`${apiOrigin}/${a.src}`}
+                        name={a.name}
+                        contentType={a.contentType}
+                        size={formatSize(a.size)}
+                        onDownload={() =>
+                          downloadFile(`${apiOrigin}/${a.src}`, a.name).catch(() => toast.error("Couldn't download file"))
+                        }
+                      />
+                    </div>
                   )
                 )}
               </div>
@@ -272,7 +305,30 @@ export default function (props) {
                   {flag && (messageItem.status === "⧖" ? (
                     <Spinner size="xs" className="align-middle" />
                   ) : (
-                    <span className={messageItem.status === "✔✔" ? "text-purple-500" : ""}>{messageItem.status}</span>
+                    messageItem.status === "!" ? (
+                      <button
+                        type="button"
+                        title={messageItem.sendError || "Message failed. Retry"}
+                        aria-label="Retry sending message"
+                        onClick={() => socket.current.emit(
+                          chatID.type === "user" ? "createChatPrivate" : "sendMessage",
+                          {
+                            cid: messageItem.chat,
+                            content: messageItem.content,
+                            replace: messageItem._id,
+                            reply_to: messageItem.reply_to,
+                            attachments: messageItem.attachments,
+                          }
+                        )}
+                        className="font-bold text-[var(--autumn-clay)] underline decoration-dotted underline-offset-2"
+                      >
+                        Retry
+                      </button>
+                    ) : (
+                      <span className={messageItem.status === "✔✔" ? "text-purple-500" : ""}>
+                        {messageItem.status}
+                      </span>
+                    )
                   ))}
                 </span>
               );
@@ -311,11 +367,22 @@ export default function (props) {
               </div>
             )}
           </div>
+          {confirmation && <ConfirmDialog {...confirmation} onCancel={() => setConfirmation(null)} />}
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent("lavender:close-message-menus", { detail: messageItem._id }));
+            setShowReactions((value) => !value);
+          }}
+          aria-label="React to message"
+          className={`message-reaction-trigger absolute z-10 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full items-center justify-center text-sm ${flag ? "-left-9" : "-right-9"} ${showReactions ? "is-open" : ""}`}
+        >
+          😊
+        </button>
         {showReactions && (
           <div
-            onMouseLeave={() => setShowReactions(false)}
-            className="absolute z-30 flex gap-1 bg-white dark:bg-gray-800 shadow-lg rounded-full px-2 py-1 -top-10 left-0"
+            className={`absolute z-30 flex gap-1 bg-white dark:bg-gray-800 border border-black/5 dark:border-white/10 shadow-lg rounded-full px-2 py-1 -top-11 ${flag ? "right-0" : "left-0"}`}
           >
             {REACTION_EMOJIS.map((e) => (
               <button
@@ -327,31 +394,26 @@ export default function (props) {
           </div>
         )}
         <div
-          onClick={() => {
-            contextref.current.style.display = "none";
-          }}
+          onClick={closeMenu}
           ref={contextref}
-          onMouseLeave={() => {
-            contextref.current.style.display = "none";
-          }}
-          className="font-semibold text-gray-600 dark:text-gray-200 absolute text-sm w-40 py-2 h-fit hidden bg-white dark:bg-gray-800 shadow-lg rounded-lg z-20"
+          className={`message-context-menu font-semibold absolute text-sm w-44 py-1 h-fit z-20 ${contextOpen ? "block" : "hidden"} ${flag ? "right-0" : "left-0"} top-full mt-1`}
         >
           <button
-            onClick={replyHandle}
+            onClick={() => { replyHandle(); closeMenu(); }}
             className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <img src={reply} className="w-4 h-4 dark:invert dark:opacity-80"></img>
             <div>Reply</div>
           </button>
           <button
-            onClick={copyHandle}
+            onClick={() => { copyHandle(); closeMenu(); }}
             className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <img src={copy} className="w-4 h-4 dark:invert dark:opacity-80"></img>
             <div>Copy Text</div>
           </button>
           <button
-            onClick={forwardHandle}
+            onClick={() => { forwardHandle(); closeMenu(); }}
             className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <img src={forward} className="w-4 h-4 dark:invert dark:opacity-80"></img>
@@ -359,15 +421,7 @@ export default function (props) {
           </button>
 
           <button
-            onClick={(e) => { e.stopPropagation(); contextref.current.style.display = "none"; setShowReactions((v) => !v); }}
-            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
-          >
-            <span className="w-4 h-4 flex items-center justify-center">😊</span>
-            <div>React</div>
-          </button>
-
-          <button
-            onClick={starHandle}
+            onClick={() => { starHandle(); closeMenu(); }}
             className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <span className={`w-4 h-4 flex items-center justify-center ${isStarred ? "text-amber-500" : "text-gray-500"}`}>★</span>
@@ -376,7 +430,7 @@ export default function (props) {
 
           {canPin && (
             <button
-              onClick={pinHandle}
+              onClick={() => { pinHandle(); closeMenu(); }}
               className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
             >
               <span className={`w-4 h-4 flex items-center justify-center ${isPinned ? "" : "opacity-60"}`}>📌</span>
@@ -384,9 +438,9 @@ export default function (props) {
             </button>
           )}
 
-          {flag && messageItem.content && (
+          {canEdit && (
             <button
-              onClick={editHandle}
+              onClick={() => { editHandle(); closeMenu(); }}
               className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
             >
               <img src={edit} className="w-4 h-4 dark:invert dark:opacity-80"></img>
@@ -395,7 +449,7 @@ export default function (props) {
           )}
 
           <button
-            onClick={deleteHandle}
+            onClick={() => { deleteHandle(); closeMenu(); }}
             className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <img src={del} className="w-4 h-4 dark:invert dark:opacity-80"></img>
@@ -403,7 +457,7 @@ export default function (props) {
           </button>
 
           <button
-            onClick={reportHandle}
+            onClick={() => { reportHandle(); closeMenu(); }}
             className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <img src={reportIcon} className="w-4 h-4 dark:invert dark:opacity-80"></img>

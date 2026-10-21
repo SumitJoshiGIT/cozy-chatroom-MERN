@@ -61,7 +61,7 @@ const GROUPS = [
 function DayDivider({ children }) {
   return (
     <div className="flex items-center justify-center my-2">
-      <span className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm text-gray-500 dark:text-gray-400 text-xs font-semibold px-3 py-1 rounded-full shadow-sm">
+      <span className="bg-[var(--surface-raised)] backdrop-blur-sm text-[var(--text-muted)] text-xs font-semibold px-3 py-1 rounded-full shadow-sm">
         {children}
       </span>
     </div>
@@ -73,15 +73,15 @@ export default function Features() {
     <div className="w-full min-h-screen">
       <div className="max-w-4xl mx-auto px-6 pt-14 pb-24">
 
-        <Link to="/" className="inline-flex items-center gap-2 text-sm text-purple-950/60 hover:text-purple-950 transition-colors">
+        <Link to="/" className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
           <img src={icon} alt="" className="h-6 w-auto" />
           Lavender
         </Link>
 
-        <h1 className="font-display text-5xl md:text-6xl text-purple-950 mt-6 leading-none animate-fade-in-up" style={{ animationFillMode: 'backwards' }}>
+        <h1 className="font-display text-5xl md:text-6xl text-[var(--text)] mt-6 leading-none animate-fade-in-up" style={{ animationFillMode: 'backwards' }}>
           Everything inside
         </h1>
-        <p className="text-lg text-purple-950/70 mt-4 max-w-xl animate-fade-in-up" style={{ animationDelay: '80ms', animationFillMode: 'backwards' }}>
+        <p className="text-lg text-[var(--text-muted)] mt-4 max-w-xl animate-fade-in-up" style={{ animationDelay: '80ms', animationFillMode: 'backwards' }}>
           Not a feature checklist for its own sake — just what's actually in the app, so you know it's there before you go looking for it.
         </p>
 
@@ -102,13 +102,13 @@ export default function Features() {
                 {group.items.map((item) => (
                   <div
                     key={item.name}
-                    className="flex items-start gap-3 bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-4 animate-fade-in-up"
+                    className="flex items-start gap-3 bg-[var(--surface-raised)] border border-[var(--border)] rounded-2xl shadow-sm p-4 animate-fade-in-up"
                     style={{ animationDelay: `${180 + gi * 40}ms`, animationFillMode: 'backwards' }}
                   >
                     <span className="text-2xl leading-none shrink-0" aria-hidden="true">{item.emoji}</span>
                     <div className="min-w-0">
-                      <div className="font-semibold text-purple-950 dark:text-purple-100 text-sm">{item.name}</div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{item.text}</p>
+                      <div className="font-semibold text-[var(--text)] text-sm">{item.name}</div>
+                      <p className="text-sm text-[var(--text-muted)] mt-0.5">{item.text}</p>
                     </div>
                   </div>
                 ))}

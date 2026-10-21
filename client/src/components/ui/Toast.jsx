@@ -3,15 +3,15 @@ import { createContext, useCallback, useContext, useRef, useState } from 'react'
 const ToastContext = createContext(null);
 
 const STYLES = {
-  error: 'bg-red-50 border-red-200 text-red-700',
-  success: 'bg-green-50 border-green-200 text-green-700',
-  info: 'bg-white border-gray-200 text-gray-700',
+  error: 'bg-[var(--surface-raised)] border-[var(--autumn-clay)]/40 text-[var(--text)]',
+  success: 'bg-[var(--surface-raised)] border-[var(--spring-sage)]/50 text-[var(--text)]',
+  info: 'bg-[var(--surface-raised)] border-[var(--accent)]/35 text-[var(--text)]',
 };
 
 const ICON = {
-  error: '⚠',
+  error: '!',
   success: '✓',
-  info: 'ℹ',
+  info: 'i',
 };
 
 export function ToastProvider({ children }) {
@@ -22,9 +22,13 @@ export function ToastProvider({ children }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const push = useCallback((message, type = 'info', duration = 4000) => {
+  const push = useCallback((message, type = 'info', duration = 4500) => {
+    const text = String(message || 'Something went wrong. Please try again.');
     const id = ++idRef.current;
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => {
+      if (prev.some((toast) => toast.message === text && toast.type === type)) return prev;
+      return [...prev.slice(-3), { id, message: text, type }];
+    });
     if (duration) setTimeout(() => dismiss(id), duration);
     return id;
   }, [dismiss]);
@@ -38,15 +42,29 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={toast}>
       {children}
-      <div className="fixed z-50 top-4 right-4 flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)]">
+      <div
+        className="fixed z-50 top-4 right-4 flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)]"
+        aria-live="polite"
+        aria-atomic="false"
+      >
         {toasts.map((t) => (
           <div
             key={t.id}
-            onClick={() => dismiss(t.id)}
-            className={`animate-toast-in cursor-pointer shadow-lg rounded-lg border px-4 py-3 text-sm flex items-start gap-2 ${STYLES[t.type] || STYLES.info}`}
+            role={t.type === 'error' ? 'alert' : 'status'}
+            className={`animate-toast-in shadow-lg rounded-2xl border px-4 py-3 text-sm flex items-start gap-3 backdrop-blur-md ${STYLES[t.type] || STYLES.info}`}
           >
-            <span className="font-bold">{ICON[t.type] || ICON.info}</span>
+            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent-light)] text-xs font-bold text-[var(--accent-dark)]">
+              {ICON[t.type] || ICON.info}
+            </span>
             <span className="flex-1">{t.message}</span>
+            <button
+              type="button"
+              onClick={() => dismiss(t.id)}
+              className="rounded-full px-1 text-[var(--text-muted)] hover:bg-[var(--accent-light)] hover:text-[var(--text)]"
+              aria-label="Dismiss notification"
+            >
+              ×
+            </button>
           </div>
         ))}
       </div>

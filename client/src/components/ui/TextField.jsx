@@ -8,7 +8,7 @@ export const TextField = forwardRef(function TextField({ accentColor, className 
       ref={ref}
       {...props}
       style={accentColor ? { borderColor: accentColor, ...props.style } : props.style}
-      className={`bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-full border px-4 py-1.5 outline-none focus:ring-2 focus:ring-[var(--accent-light)] transition-colors ${disabledCls} ${accentColor ? 'border-l-4 rounded-l-md' : 'border-gray-200 dark:border-gray-600'} ${inputClassName} ${className}`}
+      className={`glass-field bg-[var(--surface-muted)] text-[var(--text)] placeholder-[var(--text-muted)] rounded-full border px-4 py-2 outline-none focus:ring-2 focus:ring-[var(--accent-light)] transition-colors ${disabledCls} ${accentColor ? 'border-l-4 rounded-l-md' : 'border-[var(--border)]'} ${inputClassName} ${className}`}
     />
   );
 });
@@ -18,7 +18,7 @@ export const TextArea = forwardRef(function TextArea({ className = '', ...props 
     <textarea
       ref={ref}
       {...props}
-      className={`bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md border border-gray-200 dark:border-gray-600 px-3 py-2 outline-none resize-none focus:ring-2 focus:ring-[var(--accent-light)] transition-colors ${disabledCls} ${className}`}
+      className={`glass-field bg-[var(--surface-muted)] text-[var(--text)] placeholder-[var(--text-muted)] rounded-xl border border-[var(--border)] px-3 py-2 outline-none resize-none focus:ring-2 focus:ring-[var(--accent-light)] transition-colors ${disabledCls} ${className}`}
     />
   );
 });

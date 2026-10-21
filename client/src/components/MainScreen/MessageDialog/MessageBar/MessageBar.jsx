@@ -116,14 +116,18 @@ const MessageBar = React.memo((props) => {
       content: message,
       mid: id,
       chat: chatID.id,
-      time: new Date(),
-      reply_to: r2,
+      createdAt: new Date(),
       updatedAt: new Date(),
+      reply_to: r2,
       status: "⧖",
+      sendQueued: true,
       attachments: files,
     };
-    if (db)
-      db.transaction("messages", "readwrite").objectStore("messages").put(msg);
+    if (db) {
+      const cachedMessage = { ...msg };
+      delete cachedMessage.sendQueued;
+      db.transaction("messages", "readwrite").objectStore("messages").put(cachedMessage);
+    }
     setMessages((prev) => {
       const obj = { ...prev };
       obj[chatID.id] = { ...(obj[chatID.id] || {}), ...{ [msg._id]: msg } };
@@ -132,6 +136,24 @@ const MessageBar = React.memo((props) => {
     
     setMessage("");
     setFiles([]);
+
+    const eventName = chatID.type === "user" ? "createChatPrivate" : "sendMessage";
+    console.info("[chat] sending message", {
+      event: eventName,
+      cid: chatID.id,
+      replace: msg._id,
+      hasAttachments: msg.attachments.length > 0,
+    });
+    socket.current.emit(
+      eventName,
+      {
+        cid: chatID.id,
+        content: msg.content,
+        replace: msg._id,
+        reply_to: msg.reply_to,
+        attachments: msg.attachments,
+      }
+    );
 
     if (props.reply) props.setReply();
     if (scrollable.current) scrollable.current.scrollTo(0, scrollable.current.scrollHeight);
@@ -145,19 +167,33 @@ const MessageBar = React.memo((props) => {
       content: "",
       mid: id,
       chat: chatID.id,
-      time: new Date(),
-      reply_to: null,
+      createdAt: new Date(),
       updatedAt: new Date(),
+      reply_to: null,
       status: "⧖",
+      sendQueued: true,
       attachments: [attachment],
     };
-    if (db)
-      db.transaction("messages", "readwrite").objectStore("messages").put(msg);
+    if (db) {
+      const cachedMessage = { ...msg };
+      delete cachedMessage.sendQueued;
+      db.transaction("messages", "readwrite").objectStore("messages").put(cachedMessage);
+    }
     setMessages((prev) => {
       const obj = { ...prev };
       obj[chatID.id] = { ...(obj[chatID.id] || {}), ...{ [msg._id]: msg } };
       return obj;
     });
+    socket.current.emit(
+      chatID.type === "user" ? "createChatPrivate" : "sendMessage",
+      {
+        cid: chatID.id,
+        content: "",
+        replace: msg._id,
+        reply_to: null,
+        attachments: msg.attachments,
+      }
+    );
     if (scrollable.current) scrollable.current.scrollTo(0, scrollable.current.scrollHeight);
   }
 
@@ -362,7 +398,7 @@ const MessageBar = React.memo((props) => {
           </button>
         </div>
         ) : (
-        <div className="p-1.5 rounded-3xl shadow-md bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 w-full flex items-end gap-1">
+        <div className="message-composer p-1.5 rounded-3xl w-full flex items-end gap-1">
           <input
             ref={filesRef}
             type="file"
@@ -410,27 +446,19 @@ const MessageBar = React.memo((props) => {
             }}
             value={message}
           ></textarea>
-          {canSend ? (
-            <IconButton
-              icon={send}
-              alt="Send"
-              size="lg"
-              onClick={SendMessage}
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={startRecording}
-              aria-label="Record voice message"
-              className="rounded-full p-1.5 h-fit text-gray-500 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 transition-all"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="2" width="6" height="12" rx="3" />
-                <path d="M5 10a7 7 0 0 0 14 0" />
-                <line x1="12" y1="19" x2="12" y2="22" />
-              </svg>
-            </button>
-          )}
+          <span className="composer-action-slot">
+            {canSend ? (
+              <IconButton icon={send} alt="Send" size="lg" onClick={SendMessage} />
+            ) : (
+              <button type="button" onClick={startRecording} aria-label="Record voice message" className="composer-action">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="2" width="6" height="12" rx="3" />
+                  <path d="M5 10a7 7 0 0 0 14 0" />
+                  <line x1="12" y1="19" x2="12" y2="22" />
+                </svg>
+              </button>
+            )}
+          </span>
         </div>
         )
       ) : null}

@@ -24,7 +24,9 @@ export default function (props){
       <div className="flex items-center justify-between w-full pb-3">
         <div className="flex items-center gap-2">
           <IconButton icon={menu} alt="Collapse sidebar" onClick={()=>{props.setStyle((prev)=>!prev)}} />
-          <h1 className="text-xl font-bold text-gray-700 dark:text-gray-100">Messages</h1>
+          <div>
+            <h1 className="text-xl font-bold text-gray-700 dark:text-gray-100">Messages</h1>
+          </div>
         </div>
         <div className="flex items-center gap-1">
           <IconButton icon={starred} alt="Starred messages" onClick={()=>{setMessageDialog(6)}} />

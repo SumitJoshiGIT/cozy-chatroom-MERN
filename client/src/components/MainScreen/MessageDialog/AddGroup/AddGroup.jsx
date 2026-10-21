@@ -1,7 +1,6 @@
-import {useRef, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import group from '/group.svg'
 import back from '/back-one.svg'
-import background from '/background.jpg'
 import Friends from "./Friends";
 import ImageInput from "../../ImageInput";
 import { useCtx } from "../../AppScreen";
@@ -19,16 +18,43 @@ export default function (props){
     const [chatnameSt,setUsername]=useState('');
     const [members,setMembers]=useState(new Set());
     const [creating,setCreating]=useState(false);
+    const [error,setError]=useState("");
+    const createTimeout = useRef(null);
+
+    useEffect(() => () => {
+      if (createTimeout.current) clearTimeout(createTimeout.current);
+    }, []);
 
     const createGroup = () => {
-         if(!chatnameSt.trim()) return;
+         if(!chatnameSt.trim() || creating) return;
+         if (!socket.current || !socket.current.connected) {
+           setError("Connection unavailable. Please try again.");
+           return;
+         }
+         setError("");
          setCreating(true);
-         socket.current.once('chat', (datagroup) => {
+         const onCreated = (datagroup) => {
            if (datagroup.type === 'chats') {
+             socket.current.off('chatError', onError);
+             if (createTimeout.current) clearTimeout(createTimeout.current);
              setCreating(false);
              setMessageDialog(0);
            }
-         });
+         };
+         const onError = (details) => {
+           socket.current.off('chat', onCreated);
+           if (createTimeout.current) clearTimeout(createTimeout.current);
+           setCreating(false);
+           setError(details?.message || "Unable to create the group.");
+         };
+         socket.current.once('chat', onCreated);
+         socket.current.once('chatError', onError);
+         createTimeout.current = setTimeout(() => {
+           socket.current.off('chat', onCreated);
+           socket.current.off('chatError', onError);
+           setCreating(false);
+           setError("Group creation timed out. Please try again.");
+         }, 10000);
          socket.current.emit('createChat',{
            name: chatnameSt,
            members: [...members.keys()],
@@ -39,16 +65,16 @@ export default function (props){
          });
     }
 
-    return <Card className='max-w-md w-full h-full flex flex-col overflow-hidden animate-fade-in-up'>
+    return <Card className='group-create-card max-w-md w-full h-full flex flex-col overflow-hidden animate-fade-in-up'>
       <div className="relative shrink-0">
-        <div style={{ backgroundImage:`url(${background})` }} className="bg-gray-200 flex items-center w-full h-28">
+        <div className="group-create-cover flex items-center w-full h-28">
           <IconButton icon={back} alt="Back" onClick={()=>setMessageDialog(0)} className="m-3 absolute bg-white shadow-sm" />
         </div>
-        <div className="flex flex-col items-center -mt-12">
+        <div className="group-create-identity flex flex-col items-center -mt-12">
           <ImageInput src={group} fileform={fileform} callback={()=>{}} editable={true} />
           <TextField
-            className="text-center w-48 mt-3"
-            placeholder="Group name"
+            className="group-create-name text-center w-64 mt-3"
+            placeholder="Name your group"
             ref={chatname}
             onChange={(event)=>setUsername(event.target.value)}
             value={chatnameSt}
@@ -58,12 +84,18 @@ export default function (props){
       </div>
 
       <div className="flex-1 min-h-0 px-4 pt-4 flex flex-col">
-        <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 shrink-0">Add members</div>
+        <div className="group-create-heading shrink-0">
+          <span className="text-xs font-semibold uppercase tracking-wide">People</span>
+          <span className="text-xs text-[var(--text-muted)]">Choose who should be here</span>
+        </div>
         <Friends members={members} setMembers={setMembers}/>
       </div>
 
-      <div className="shrink-0 flex items-center justify-between px-4 py-3 border-t border-gray-100">
-        <div className="text-sm text-gray-500">{members.size} member{members.size===1?'':'s'} selected</div>
+      <div className="group-create-footer shrink-0 flex items-center justify-between px-5 py-4">
+        <div>
+          <div className="text-sm font-semibold text-[var(--text)]">{members.size} selected</div>
+          {error && <div className="text-xs text-red-500 mt-1">{error}</div>}
+        </div>
         <Button
           onClick={createGroup}
           disabled={!chatnameSt.trim() || creating}

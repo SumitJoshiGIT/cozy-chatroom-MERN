@@ -22,10 +22,10 @@ export default function Hero() {
             className="h-44 w-auto -ml-9 -mb-4 animate-sway"
             style={{ transformOrigin: '50% 90%' }}
           />
-          <h1 className="font-display text-6xl md:text-7xl text-purple-950 mt-4 leading-none animate-fade-in-up" style={{ animationDelay: '80ms', animationFillMode: 'backwards' }}>
+          <h1 className="font-display text-6xl md:text-7xl text-[var(--text)] mt-4 leading-none animate-fade-in-up" style={{ animationDelay: '80ms', animationFillMode: 'backwards' }}>
             Lavender
           </h1>
-          <p className="text-lg text-purple-950/70 mt-4 max-w-sm animate-fade-in-up" style={{ animationDelay: '160ms', animationFillMode: 'backwards' }}>
+          <p className="text-lg text-[var(--text-muted)] mt-4 max-w-sm animate-fade-in-up" style={{ animationDelay: '160ms', animationFillMode: 'backwards' }}>
             One quiet place for the conversations that matter — just you, your people, and nothing competing for your attention.
           </p>
 
@@ -40,23 +40,23 @@ export default function Hero() {
 
           <Link
             to="/features"
-            className="text-sm text-purple-950/60 hover:text-purple-950 underline underline-offset-4 decoration-purple-950/30 mt-5 animate-fade-in-up"
+            className="text-sm text-[var(--text-muted)] hover:text-[var(--text)] underline underline-offset-4 decoration-[var(--border)] mt-5 animate-fade-in-up"
             style={{ animationDelay: '280ms', animationFillMode: 'backwards' }}
           >
             See everything inside →
           </Link>
 
-          <dl className="flex gap-6 mt-14 text-sm text-purple-950/60 animate-fade-in-up" style={{ animationDelay: '320ms', animationFillMode: 'backwards' }}>
+          <dl className="flex gap-6 mt-14 text-sm text-[var(--text-muted)] animate-fade-in-up" style={{ animationDelay: '320ms', animationFillMode: 'backwards' }}>
             <div>
-              <dt className="font-semibold text-purple-950">Groups</dt>
+              <dt className="font-semibold text-[var(--text)]">Groups</dt>
               <dd>as easily as a DM</dd>
             </div>
             <div>
-              <dt className="font-semibold text-purple-950">Photos & files</dt>
+              <dt className="font-semibold text-[var(--text)]">Photos & files</dt>
               <dd>previewed instantly</dd>
             </div>
             <div>
-              <dt className="font-semibold text-purple-950">Everywhere</dt>
+              <dt className="font-semibold text-[var(--text)]">Everywhere</dt>
               <dd>synced in real time</dd>
             </div>
           </dl>
@@ -64,7 +64,7 @@ export default function Hero() {
 
         <div className="relative">
           <div className="absolute -inset-6 bg-white/40 rounded-[2rem] blur-2xl" aria-hidden="true" />
-          <div className="relative bg-white rounded-2xl shadow-2xl p-4 flex flex-col gap-2 animate-fade-in-up" style={{ animationDelay: '200ms', animationFillMode: 'backwards' }}>
+          <div className="relative bg-[var(--surface-raised)] border border-[var(--border)] backdrop-blur-xl rounded-2xl shadow-[var(--shadow)] p-4 flex flex-col gap-2 animate-fade-in-up" style={{ animationDelay: '200ms', animationFillMode: 'backwards' }}>
             {CONVO.map((m, i) => (
               <div
                 key={i}
@@ -73,7 +73,7 @@ export default function Hero() {
               >
                 {!m.mine && <Avatar size="xs" />}
                 <div
-                  className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm shadow-sm ${m.mine ? 'bg-[#EEFFDE] rounded-br-sm' : 'bg-gray-100 rounded-bl-sm'}`}
+                  className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm shadow-sm ${m.mine ? 'bg-[var(--accent-light)] rounded-br-sm' : 'bg-[var(--surface-muted)] rounded-bl-sm'}`}
                 >
                   {!m.mine && <div className="text-xs font-bold" style={{ color: m.color }}>{m.name}</div>}
                   {m.attachment ? (

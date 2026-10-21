@@ -45,22 +45,17 @@ export default function(props){
     }
 
 return  <div className='border-1 overflow-clip w-fit h-36 flex items-baseline rounded-full'>
-       <div onMouseEnter={()=>{if(!props.uneditable)ref.current.style.display='flex'}} onMouseLeave={()=>{
-            ref.current.style.display='none'
-
-            }}
-            className="h-36 w-36 relative">
-        <img className="h-36 w-36 bg-white border rounded-full object-cover" src={src}/>
+       <div className="profile-image-input h-36 w-36 relative">
+        <img className="profile-image h-36 w-36 bg-white border rounded-full object-cover" src={src}/>
         {reading && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-full">
             <Spinner />
           </div>
         )}
-        <div ref={ref} className="bg-transparent backdrop-blur-lg flex hidden  justify-center relative transition-3s bottom-1/2 items-center opacity-60 h-1/2 rounded-b-full w-36 ">
+        {!props.uneditable && <div ref={ref} className="profile-image-edit-overlay">
         <button className="outline-none active:outline-none" onClick={()=>{file.current.click()}}>
         <img className='w-8' src={edit}></img></button>
-
-        </div>
+        </div>}
        </div>
        <div>
        <input accept='image/*' onChange={handleChange} ref={file} className="text-xs w-0 h-0" type='file'/>

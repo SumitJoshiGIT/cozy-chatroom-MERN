@@ -3,9 +3,9 @@ import { useToast } from "../../../ui/Toast";
 import Spinner from "../../../ui/Spinner";
 
 const CATEGORIES = [
-  { label: "Photos & Videos", icon: "🖼️", accept: "image/*,video/*" },
-  { label: "Audio", icon: "🎵", accept: "audio/*" },
-  { label: "Document", icon: "📄", accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" },
+  { label: "Photos & Videos", icon: "/media.svg", accept: "image/*,video/*" },
+  { label: "Audio", icon: "/audio.svg", accept: "audio/*" },
+  { label: "Document", icon: "/files.svg", accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" },
 ];
 
 const DURATIONS = [
@@ -79,7 +79,7 @@ export default function AttachMenu({ onPick, onSendLocation, sharingLiveLocation
         aria-label="Attach"
         className="rounded-full p-1.5 h-fit hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 transition-all"
       >
-        📎
+        <img src="/attachment.svg" alt="" className="w-5 h-5 opacity-70 dark:invert dark:opacity-80" />
       </button>
       {open && (
         <div className="absolute z-30 bottom-12 left-0 w-56 rounded-2xl shadow-lg bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-1 text-sm">
@@ -87,7 +87,7 @@ export default function AttachMenu({ onPick, onSendLocation, sharingLiveLocation
             <div className="flex items-center justify-center py-4"><Spinner size="sm" /></div>
           ) : view === "durations" ? (
             <>
-              <div className="px-2 py-1 text-xs font-semibold text-gray-400">Share live location for</div>
+              <div className="px-2 py-1 text-xs font-semibold text-gray-400">Duration</div>
               {DURATIONS.map((d) => (
                 <button
                   key={d.label}
@@ -99,8 +99,11 @@ export default function AttachMenu({ onPick, onSendLocation, sharingLiveLocation
               <button
                 type="button"
                 onClick={() => setView("location")}
-                className="w-full text-left px-2 py-2 rounded-lg text-gray-400 hover:bg-black/5 dark:hover:bg-white/10"
-              >Back</button>
+                className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg text-gray-400 hover:bg-black/5 dark:hover:bg-white/10"
+              >
+                <img src="/back-one.svg" alt="" className="w-4 h-4 dark:invert opacity-70" />
+                <span>Back</span>
+              </button>
             </>
           ) : view === "location" ? (
             <>
@@ -108,19 +111,28 @@ export default function AttachMenu({ onPick, onSendLocation, sharingLiveLocation
                 type="button"
                 onClick={sendCurrent}
                 className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10"
-              >📍 <span>Send current location</span></button>
+              >
+                <img src="/location.svg" alt="" className="w-5 h-5 opacity-70 dark:invert" />
+                <span>Send current location</span>
+              </button>
               <button
                 type="button"
                 disabled={!!sharingLiveLocation}
                 title={sharingLiveLocation ? "Already sharing live location in this chat" : undefined}
                 onClick={() => setView("durations")}
                 className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-40"
-              >🔴 <span>Share live location</span></button>
+              >
+                <img src="/location.svg" alt="" className="w-5 h-5 opacity-70 dark:invert" />
+                <span>Share live location</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setView("menu")}
-                className="w-full text-left px-2 py-2 rounded-lg text-gray-400 hover:bg-black/5 dark:hover:bg-white/10"
-              >Back</button>
+                className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg text-gray-400 hover:bg-black/5 dark:hover:bg-white/10"
+              >
+                <img src="/back-one.svg" alt="" className="w-4 h-4 dark:invert opacity-70" />
+                <span>Back</span>
+              </button>
             </>
           ) : (
             <>
@@ -134,7 +146,7 @@ export default function AttachMenu({ onPick, onSendLocation, sharingLiveLocation
                   }}
                   className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10"
                 >
-                  <span className="text-lg leading-none">{c.icon}</span>
+                  <img src={c.icon} alt="" className="w-5 h-5 opacity-70 dark:invert" />
                   <span>{c.label}</span>
                 </button>
               ))}
@@ -143,7 +155,7 @@ export default function AttachMenu({ onPick, onSendLocation, sharingLiveLocation
                 onClick={() => setView("location")}
                 className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10"
               >
-                <span className="text-lg leading-none">📍</span>
+                <img src="/location.svg" alt="" className="w-5 h-5 opacity-70 dark:invert" />
                 <span>Location</span>
               </button>
             </>

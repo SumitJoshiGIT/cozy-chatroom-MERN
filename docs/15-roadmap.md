@@ -51,7 +51,7 @@ Cross-referencing that list against [Chapter 1's feature table](./01-overview.md
 | Communities / broadcast channels | ❌ not implemented (groups only) |
 | Push notifications (tab closed) | ❌ not implemented |
 | Voice messages | ❌ not implemented |
-| Voice / video calls | ❌ not implemented (dead WebRTC stub existed, since removed) |
+| Voice / video calls | 🚧 LiveKit architecture/scaffold documented; 1:1 MVP and group-call hardening remain |
 | Message edit | ✅ implemented |
 | Message forward | ✅ implemented |
 | Message pinning | ✅ implemented |
@@ -137,14 +137,14 @@ These aren't "harder versions" of the features above — they change assumptions
 made elsewhere in the system, which is why they're last regardless of how
 compelling they are competitively.
 
-7. **Voice / video calling.** The codebase's only prior attempt at this was an
-    empty `webRTC.js` stub, removed as dead code during the earlier cleanup
-    pass ([Chapter 1](./01-overview.md)). This needs a full WebRTC signaling
-    layer (offer/answer/ICE-candidate exchange over Socket.IO, which the app
-    *does* already have the transport for), plus a STUN/TURN server for NAT
-    traversal in production, plus real call UI (ringing state, in-call
-    controls). The signaling half reuses existing infrastructure; the TURN
-    server and call UI do not.
+7. **Voice / video calling.** Lavender should use LiveKit's SFU rather than
+    implementing a peer-to-peer mesh or custom offer/answer/ICE exchange.
+    Socket.IO already provides the per-user control channel and chat rooms;
+    the existing session/token auth and `Chats.users` membership provide the
+    authorization boundary. The remaining work is staged in
+    [Chapter 16](./16-video-calls.md): secure token issuance, 1:1 ringing and
+    cleanup, small-group participant UX, reconnect/device handling, then
+    Socket.IO scaling and operational telemetry.
 8. **Stories / status updates.** A new content type with its own lifecycle
     (auto-expiring after 24 hours — the first *time-based* deletion job this
     app would need, versus everything else being event-driven), a new feed UI

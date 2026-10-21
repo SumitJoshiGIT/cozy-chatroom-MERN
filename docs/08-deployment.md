@@ -98,3 +98,59 @@ scale":
 These are exactly the kind of gaps worth being able to name proactively in a
 system-design interview — see the [Interview Prep section](./09-interview-prep.md),
 particularly [Chapter 11](./11-interview-system-design.md).
+
+## LiveKit calls
+
+Audio and video calls use a separate LiveKit Cloud or self-hosted SFU. The
+Lavender server issues room tokens after checking the authenticated user's
+membership in the requested chat. Configure the three server-side LiveKit
+variables before enabling calls:
+
+```bash
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=...
+LIVEKIT_API_SECRET=...
+```
+
+The API secret must never be exposed to the browser. The client and server
+must be served over HTTPS in production, and the LiveKit project must allow
+the deployed client origin. See [Chapter 16](./16-video-calls.md) for the
+signaling sequence, security model, and scaling notes.
+
+## Docker Compose deployment
+
+For local or single-host deployments, the repository's
+[`docker-compose.yml`](../docker-compose.yml) runs three services:
+
+| Service | Responsibility | Host address |
+|---|---|---|
+| `mongo` | MongoDB with the named `mongo-data` volume | internal `mongo:27017`, host `localhost:27017` |
+| `server` | Express, Passport, Socket.IO, and call-token API | `http://localhost:3000` |
+| `client` | Vite production build served by Nginx | `http://localhost:5173` |
+
+Start it with:
+
+```bash
+docker compose up --build
+```
+
+The server uses `mongodb://mongo:27017/Lavendar` inside the Compose network.
+The client must use `VITE_API_ORIGIN=http://localhost:3000`, because Vite
+values are consumed by the browser and `server` is not resolvable from the
+user's browser. Uploaded files persist through the `./server/public` bind
+mount. For production, replace that local filesystem with object storage and
+provide real secrets through the deployment environment rather than a
+committed `.env` file.
+
+The Compose file also publishes MongoDB on `localhost:27017`. This supports a
+hybrid development mode where only MongoDB runs in Docker and the Node server
+and Vite client run directly on the host:
+
+```bash
+docker compose up -d mongo
+# server/.env: DATABASE=mongodb://localhost:27017/Lavendar
+cd server && npm run dev
+# separate terminal: cd client && npm run dev
+```
+
+The published port must not overlap with another host MongoDB process.

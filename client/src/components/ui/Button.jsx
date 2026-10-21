@@ -4,13 +4,14 @@ const variants = {
   google: 'bg-blue-400 text-white hover:bg-blue-500',
   danger: 'bg-red-50 text-red-600 hover:bg-red-100',
   dangerSolid: 'bg-red-500 text-white hover:bg-red-600',
-  ghost: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600',
+  ghost: 'bg-[var(--surface-muted)] text-[var(--text-muted)] hover:bg-[var(--accent-light)] hover:text-[var(--text)]',
 };
 
 export default function Button({ variant = 'primary', className = '', children, as: As = 'button', disabled, ...props }) {
   return (
     <As
       aria-disabled={disabled || undefined}
+      disabled={As === 'button' ? disabled : undefined}
       className={`rounded-full px-3 py-1 text-sm font-semibold inline-flex items-center justify-center transition-all active:scale-95
         ${disabled ? 'opacity-40 pointer-events-none' : ''}
         ${variants[variant] || variants.primary} ${className}`}

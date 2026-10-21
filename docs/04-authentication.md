@@ -138,3 +138,36 @@ from a Socket.IO handshake, because it's the same session store underneath.
   project and was removed because the server never actually issued a real token —
   it's flagged here as a legitimate next step if this app's threat model changes
   (e.g. once it supports state-changing GET-adjacent flows or third-party embeds).
+
+## Feature-flagged demo accounts
+
+When `DEMO_ENABLED=true`, `POST /auth/demo` creates a unique temporary demo
+user. The client exposes this through **Try the demo** on the sign-in screen
+when `VITE_DEMO_ENABLED=true`.
+
+- The browser stores the signed demo token locally and sends it through the
+  existing Socket.IO authentication flow.
+- A repeat request from that browser reuses the still-valid demo account.
+- The default lifetime is 24 hours and is configurable with
+  `DEMO_TTL_HOURS`.
+- Demo users are marked with `isDemo` and receive a `demoExpiresAt` timestamp.
+- A scheduled server cleanup removes expired demo users, demo chats, and demo
+  messages.
+- Demo users cannot join existing chats or add real users to new chats, so
+  cleanup cannot remove a real user's conversation.
+- Demo credentials are random and are not exposed as normal local-login
+  credentials.
+
+Enable the feature independently on the server and client:
+
+```env
+# server/.env
+DEMO_ENABLED=true
+DEMO_TTL_HOURS=24
+
+# client/.env
+VITE_DEMO_ENABLED=true
+```
+
+The server remains authoritative. If only the client flag is enabled, the
+button receives an explicit “Demo access is unavailable” response.

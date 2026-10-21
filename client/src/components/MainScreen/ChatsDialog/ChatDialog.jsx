@@ -17,10 +17,10 @@ const ChatDialogComponent = React.memo(function ({}) {
   const effectiveStyle = isMobile ? 0 : style;
 
   return (
-    <div className={isMobile ? "h-screen w-screen" : "h-screen pb-3 pt-3"}>
+    <div className={`main-sidebar ${isMobile ? "h-screen w-screen" : "h-screen pb-3 pt-3"}`}>
       <div
         style={{ width }}
-        className={`flex flex-col items-center overflow-hidden h-full gradient-2 z-10 ${
+        className={`flex flex-col items-center overflow-hidden h-full gradient-2 z-10 main-sidebar-panel ${
           isMobile
             ? "p-3"
             : "p-3 border-gray-300 shadow-xl transition-all duration-300 rounded-e-2xl"

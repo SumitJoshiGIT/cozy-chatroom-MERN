@@ -1,4 +1,3 @@
-import background from '/background.jpg'
 import single from "/single.svg";
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { useCtx } from "../../AppScreen.jsx";
@@ -47,14 +46,11 @@ export default function (props) {
   const ActiveTab=Tabs[active];
 
   return (
-    <Card className="mt-0 max-w-xl flex-1 h-full flex-col flex">
-      <IconButton icon={close} alt="Close" onClick={()=>setMessageDialog(0)} className="w-fit bg-white fixed m-3 h-fit shadow-sm" />
-      <div style={{
-          backgroundImage:`url(${background})`,
+    <Card className="profile-card mt-0 max-w-xl flex-1 h-full flex-col flex">
+      <IconButton icon={close} alt="Close" onClick={()=>setMessageDialog(0)} className="profile-close w-fit absolute top-4 right-4 h-fit" />
+      <div className="profile-cover rounded-t-xl shadow-sm pl-8 w-full h-44 ">
 
-        }} className="bg-gray-200 rounded-t-xl shadow-sm pl-10 w-full h-44 ">
-
-        <div   className="relative top-20 border-1 w-fit h-fit flex rounded-full">
+        <div className="profile-avatar relative top-16 w-fit h-fit flex rounded-full">
           <ImageInput
             src={chat.img ? chat.img.src : single}
             fileform={fileform}
@@ -73,7 +69,7 @@ export default function (props) {
           />
         </div>
       </div>
-      <div className="h-fit pb-6 mt-8 flex p-4 flex-col gap-2">
+      <div className="profile-details h-fit pb-6 mt-6 flex p-6 flex-col gap-3">
         <TextField
           disabled={!admin}
           onChange={(event) => setName(event.target.value)}
@@ -84,7 +80,7 @@ export default function (props) {
             });
           }}
           accentColor={chat.color}
-          inputClassName="text-2xl font-bold w-fit"
+          inputClassName="profile-name text-2xl font-bold w-fit"
           value={chatnameSt}
         />
 
@@ -97,7 +93,7 @@ export default function (props) {
               username: username,
             });
           }}
-          inputClassName="text-gray-400 text-sm w-fit"
+          inputClassName="profile-username text-sm w-fit"
           value={`@${username}`}
         />
 
@@ -110,9 +106,9 @@ export default function (props) {
               about: aboutSt,
             });
           }}
-          className="mt-2 max-w-md h-20 w-full"
+          className="profile-about mt-2 max-w-md h-20 w-full"
           value={aboutSt}
-          placeholder="About"
+          placeholder="Add a short description…"
         />
 
         <div className="flex flex-wrap gap-2 mt-1">

@@ -19,6 +19,10 @@ export function getStoredAuthToken() {
   return localStorage.getItem(STORAGE_KEY);
 }
 
+export function storeAuthToken(token) {
+  localStorage.setItem(STORAGE_KEY, token);
+}
+
 export function clearStoredAuthToken() {
   localStorage.removeItem(STORAGE_KEY);
 }

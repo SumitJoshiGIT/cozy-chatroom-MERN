@@ -12,9 +12,12 @@ import { io } from "socket.io-client";
 import { useNavigate } from "react-router-dom";
 import { apiOrigin } from "../../apiOrigin";
 import { captureAuthTokenFromUrl, getStoredAuthToken } from "../../socketAuthToken";
+import CallOverlay from "./CallOverlay";
+import { useToast } from "../ui/Toast";
 const Context = createContext();
 
 function ChatScreen(props) {
+  const toast = useToast();
   const [profiles, setProfiles] = useState({});
   const [chatID, setChatID] = useState({ id: false, type: null });
   const chatIDRef = useRef(chatID);
@@ -27,6 +30,7 @@ function ChatScreen(props) {
   const [starred, setStarred] = useState(new Set());
   const [starredMessages, setStarredMessages] = useState([]);
   const [blocked, setBlocked] = useState(new Set());
+  const [mutedChats, setMutedChats] = useState({});
   const [typingUsers, setTypingUsers] = useState({});
   const [messageDialog, setMessageDialog] = useState(0);
   const [chatsLoaded, setChatsLoaded] = useState(false);
@@ -51,6 +55,7 @@ function ChatScreen(props) {
   const privateChats = useRef({});
   const scrollable = useRef(null);
   const socket = useRef(null);
+  const pendingAuth = useRef({ received: false, data: null });
   if (socket.current === null) {
     captureAuthTokenFromUrl();
     socket.current = io(apiOrigin, {
@@ -62,6 +67,35 @@ function ChatScreen(props) {
       reconnectionDelayMax: 5000,
       timeout: 5000,
       auth: (cb) => cb({ token: getStoredAuthToken() }),
+    });
+    // The server emits auth during the initial handshake. Keep it until the
+    // database-backed initialization below has registered the real handler.
+    socket.current.on("auth", (data) => {
+      pendingAuth.current = { received: true, data };
+    });
+    socket.current.on("messageError", ({ event, replace, message }) => {
+      console.error("[chat] message failed", { event, replace, message });
+      toast.error(message || "Your message could not be sent. Please try again.");
+      setMessages((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((cid) => {
+          if (next[cid]?.[replace]) {
+            next[cid] = {
+              ...next[cid],
+              [replace]: { ...next[cid][replace], status: "!", sendError: message },
+            };
+          }
+        });
+        return next;
+      });
+    });
+    socket.current.on("connect_error", () => {
+      toast.error("Lavender could not reach the server. We’ll keep trying.");
+    });
+    socket.current.on("disconnect", (reason) => {
+      if (reason !== "io client disconnect") {
+        toast.info("You’re offline for a moment. Messages will resume when connected.");
+      }
     });
   }
 
@@ -82,8 +116,9 @@ function ChatScreen(props) {
           db.createObjectStore("profiles", { keyPath: "_id" });
         if (!names.contains("messages"))
           db.createObjectStore("messages", { keyPath: "_id" });
-        setDb(event.target.result);
-        console.log("IndexedDB has been created or upgraded");
+        // Do not publish the connection here. This callback runs inside the
+        // version-change transaction; normal transactions are only safe after
+        // the open request reaches onsuccess.
       };
 
       openRequest.onerror = (event) => {
@@ -91,7 +126,9 @@ function ChatScreen(props) {
       };
 
       openRequest.onsuccess = async (event) => {
-        setDb(event.target.result);
+        const openedDb = event.target.result;
+        openedDb.onversionchange = () => openedDb.close();
+        setDb(openedDb);
         console.log("Indeasync xedDB has been created");
       };
     } else {
@@ -103,21 +140,27 @@ function ChatScreen(props) {
       let user = {};
 
       userconn.onsuccess = async (event) => {
-        if (event.srcElement.result) {
-          user = { ...(event.srcElement.result.data || {}), ...user };
-         // console.log(user);
-          const user_id = user._id;
+        if (event.target.result) {
+          user = { ...(event.target.result.data || {}), ...user };
+        }
+        const user_id = user._id;
+        if (user_id) {
           setProfiles({ [user_id]: user });
-
           userID.current = user_id;
+          setMutedChats(Object.fromEntries(
+            (user.mutedChats || [])
+              .filter((entry) => !entry.mutedUntil || new Date(entry.mutedUntil).getTime() > Date.now())
+              .map((entry) => [String(entry.chat), entry.mutedUntil])
+          ));
           console.log("Connected as:", user_id);
+        }
 
-          // Attach onsuccess synchronously, in the same tick as creating each
-          // request - an `await` in between (even on a non-promise IDBRequest,
-          // which just defers a tick) can let the request's real completion
-          // fire before the handler is attached, silently dropping it and
-          // leaving chatsLoaded stuck false forever.
-          const m = db
+        // Attach onsuccess synchronously, in the same tick as creating each
+        // request - an `await` in between (even on a non-promise IDBRequest,
+        // which just defers a tick) can let the request's real completion
+        // fire before the handler is attached, silently dropping it and
+        // leaving chatsLoaded stuck false forever.
+        const m = db
             .transaction("messages")
             .objectStore("messages")
             .getAll();
@@ -285,6 +328,14 @@ function ChatScreen(props) {
 
             socket.current.on("blocked", (ids) => {
               setBlocked(new Set(ids));
+            });
+            socket.current.on("muteState", ({ cid, mutedUntil }) => {
+              setMutedChats((prev) => {
+                const next = { ...prev };
+                if (mutedUntil && new Date(mutedUntil).getTime() > Date.now()) next[cid] = mutedUntil;
+                else delete next[cid];
+                return next;
+              });
             });
 
             socket.current.on("typing", ({ cid, uid }) => {
@@ -537,12 +588,17 @@ function ChatScreen(props) {
             });
           //  console.log("Loaded profiles:", profiles);
           };
-        }
       };
 
-      socket.current.on("auth", async (data) => {
+      const handleAuth = async (data) => {
+        pendingAuth.current = { received: false, data: null };
         user = { ...user, ...data };
         if (data) {
+          // A valid new account can have no chats yet. Mark the initial
+          // loading phase complete immediately so an empty account renders an
+          // empty state instead of an endless spinner while sync finishes.
+          setChatsLoaded(true);
+          setContactsLoaded(true);
           // See the "profile" handler above for why this needs cache-busting and the already-prefixed guard.
           if (data.img && !data.img.src.startsWith(apiOrigin)) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
           if (data.blocked) setBlocked(new Set(data.blocked.map(String)));
@@ -572,7 +628,13 @@ function ChatScreen(props) {
           socket.current.disconnect();
           navigate("/auth/signin");
         }
-      });
+      };
+      socket.current.on("auth", handleAuth);
+      if (pendingAuth.current.received) {
+        const data = pendingAuth.current.data;
+        pendingAuth.current = { received: false, data: null };
+        handleAuth(data);
+      }
     }
   }, [db]);
 
@@ -603,6 +665,8 @@ function ChatScreen(props) {
         toggleStar: (id) => socket.current.emit("toggleStar", { id }),
         getStarred: () => socket.current.emit("getStarred", {}),
         blocked,
+        mutedChats,
+        setMutedChats,
         toggleBlock: (id) =>
           socket.current.emit(blocked.has(id) ? "unblockUser" : "blockUser", { id }),
         report: (id, targetType, reason) =>
@@ -621,10 +685,36 @@ function ChatScreen(props) {
           with no chat ever selected. Gating visibility on chatID.id alone
           would hide it (and leave nothing shown) whenever one of those was
           opened from the sidebar on mobile. */}
-      <div className="h-screen w-screen flex flex-row overflow-hidden">
+      <div className="main-app h-screen w-screen flex flex-row overflow-hidden">
+        <div className="ambient-petals" aria-hidden="true">
+          <div className="bloom-branch bloom-branch-left">
+            <span className="branch-stem" />
+            <span className="branch-twig twig-one" />
+            <span className="branch-twig twig-two" />
+            <span className="blossom blossom-one"><i /><i /><i /><i /><b /></span>
+            <span className="blossom blossom-two"><i /><i /><i /><i /><b /></span>
+            <span className="blossom blossom-three"><i /><i /><i /><i /><b /></span>
+          </div>
+          <div className="bloom-branch bloom-branch-right">
+            <span className="branch-stem" />
+            <span className="branch-twig twig-one" />
+            <span className="branch-twig twig-two" />
+            <span className="blossom blossom-one"><i /><i /><i /><i /><b /></span>
+            <span className="blossom blossom-two"><i /><i /><i /><i /><b /></span>
+            <span className="blossom blossom-three"><i /><i /><i /><i /><b /></span>
+          </div>
+          <span className="petal petal-1" />
+          <span className="petal petal-2" />
+          <span className="petal petal-3" />
+          <span className="petal petal-4" />
+          <span className="leaf leaf-1" />
+          <span className="leaf leaf-2" />
+          <span className="leaf leaf-3" />
+        </div>
         {(!isMobile || (!chatID.id && messageDialog === 0)) && <ChatDialog />}
         {(!isMobile || chatID.id || messageDialog !== 0) && <MessageDialog />}
       </div>
+      <CallOverlay socket={socket} />
     </Context.Provider>
   );
 }

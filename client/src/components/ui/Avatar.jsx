@@ -15,7 +15,7 @@ export default function Avatar({ src, kind = 'user', size = 'md', className = ''
   const fallback = kind === 'group' ? group : single;
   return (
     <img
-      className={`${dim} border rounded-full bg-white object-cover shrink-0 ${imgClassName} ${className}`}
+      className={`${dim} border border-[var(--border)] rounded-full bg-[var(--surface)] object-cover shrink-0 ${imgClassName} ${className}`}
       style={{ backgroundColor: 'white', ...style }}
       src={src || fallback}
       alt=""

@@ -6,7 +6,7 @@ const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const authRouter=express.Router();
 
-const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+const clientOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',').map((s) => s.trim()).filter(Boolean);
 const demoEnabled = process.env.DEMO_ENABLED === 'true';
 const demoTtlMs = Math.max(1, Number(process.env.DEMO_TTL_HOURS || 24)) * 60 * 60 * 1000;
 
@@ -73,17 +73,32 @@ authRouter.post('/auth/verify',(req,res,next)=>{
 
 authRouter.post('/auth/resendOTP',resendOTP);
 
-authRouter.get('/auth/google/oauth',passport.authenticate('google',{scope:['profile','email']}))
+function originFromReferer(req) {
+    try {
+        const origin = new URL(req.headers.referer).origin;
+        return clientOrigins.includes(origin) ? origin : clientOrigins[0];
+    } catch {
+        return clientOrigins[0];
+    }
+}
+
+authRouter.get('/auth/google/oauth',
+  (req,res,next)=>{
+    req.session.oauthOrigin = originFromReferer(req);
+    next();
+  },
+  passport.authenticate('google',{scope:['profile','email']}))
 
 authRouter.get('/auth/google/oauth/callback',
-  passport.authenticate('google',{failureRedirect:`${clientOrigin}/auth/signin`}),
+  passport.authenticate('google',{failureRedirect:`${clientOrigins[0]}/auth/signin`}),
   (req,res)=>{
     // The session cookie set during this top-level redirect gets partitioned by
     // browsers under lavender-app's own site, so it's invisible to the later
     // cross-site socket connection from the client's origin. Hand the client a
     // short-lived token instead, which it exchanges for socket auth directly.
     const token=issueToken(req.user._id);
-    res.redirect(`${clientOrigin}/app?st=${token}`);
+    const origin = clientOrigins.includes(req.session.oauthOrigin) ? req.session.oauthOrigin : clientOrigins[0];
+    res.redirect(`${origin}/app?st=${token}`);
   }
 )
 

@@ -7,6 +7,7 @@ import Button from "../../ui/Button";
 import Divider from "../../ui/Divider";
 import { TextField } from "../../ui/TextField";
 import { useToast } from "../../ui/Toast";
+import { getStoredAuthToken, storeAuthToken } from "../../../socketAuthToken";
 
 export default function Signup(){
 
@@ -15,6 +16,19 @@ export default function Signup(){
    const [confirmPassword,setConfirmPassword]=useState("");
    const navigate=useNavigate();
    const toast=useToast();
+   const [demoLoading, setDemoLoading] = useState(false);
+
+   const tryDemo = async () => {
+    setDemoLoading(true);
+    const result = await post("/auth/demo", { demoToken: getStoredAuthToken() });
+    setDemoLoading(false);
+    if (result.status) {
+      storeAuthToken(result.token);
+      navigate("/app");
+    } else {
+      toast.error(result.message);
+    }
+   };
 
    async function SignUp(event){
     event.preventDefault();
@@ -35,8 +49,8 @@ export default function Signup(){
  return (
     <Card className="flex justify-center items-center flex-col p-8 sm:p-10 gap-3 w-full max-w-sm">
      <div className="text-center mb-1">
-        <h2 className="text-2xl font-bold text-gray-800">Welcome aboard</h2>
-        <p className="text-sm text-gray-400 mt-1">Create an account to get started.</p>
+        <h2 className="text-2xl font-bold text-[var(--text)]">Welcome aboard</h2>
+        <p className="text-sm text-[var(--text-muted)] mt-1">Create an account to get started.</p>
      </div>
      <form onSubmit={SignUp} className="w-full flex flex-col gap-3">
        <TextField placeholder="Email address" type="email" className="w-full" onChange={(e)=>setEmail(e.target.value)} value={email} />
@@ -50,7 +64,12 @@ export default function Signup(){
      <Button as="a" variant="google" href={`${apiOrigin}/auth/google/oauth`} className="w-full py-2">
            Continue with Google
      </Button>
-     <div className="text-sm text-gray-500">Already have an account? <Link to="/auth/signin" className="text-[var(--accent-dark)] font-semibold">Sign in</Link></div>
+     {import.meta.env.VITE_DEMO_ENABLED === 'true' && (
+       <Button type="button" variant="ghost" onClick={tryDemo} disabled={demoLoading} className="w-full py-2">
+         {demoLoading ? 'Starting demo…' : 'Try the demo'}
+       </Button>
+     )}
+     <div className="text-sm text-[var(--text-muted)]">Already have an account? <Link to="/auth/signin" className="text-[var(--accent-dark)] font-semibold">Sign in</Link></div>
     </Card>
  )
  }

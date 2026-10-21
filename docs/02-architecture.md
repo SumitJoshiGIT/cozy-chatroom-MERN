@@ -20,11 +20,16 @@ flowchart LR
         WS --- SESS
     end
 
+    subgraph Media["LiveKit"]
+        SFU[LiveKit SFU<br/>audio/video media]
+    end
+
     DB[(MongoDB<br/>Mongoose models)]
     FS[(Local disk<br/>server/public — uploaded images)]
 
     R -- "REST: /auth/*" --> HTTP
     R <-- "WebSocket: chats, messages, presence" --> WS
+    R -- "WebRTC media" --> SFU
     HTTP --> DB
     WS --> DB
     WS --> FS
@@ -81,6 +86,7 @@ See [Chapter 8](./08-deployment.md) for the concrete deployment story.
 | Real-time transport | Socket.IO 4 | WebSocket with polling fallback, room support |
 | Auth | Passport.js (local + custom OTP + Google OAuth2 strategies) | Pluggable strategy model fits three different login flows |
 | Session store | `express-session` + `connect-mongo` | Sessions persisted in MongoDB, shared with Socket.IO via `express-socket.io-session` |
+| Call media | LiveKit SFU | Browsers publish/subscribe media through LiveKit; Node handles invitations and token authorization |
 | Database / ODM | MongoDB + Mongoose | Document model fits chat/message/user shapes naturally |
 | Password hashing | `bcrypt` | Industry standard |
 | Input sanitization | `xss` | Strips HTML/script from user-supplied text before it's stored |

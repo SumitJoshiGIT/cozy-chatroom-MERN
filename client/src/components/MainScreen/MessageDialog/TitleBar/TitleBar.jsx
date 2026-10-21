@@ -1,4 +1,5 @@
 import { useState,useEffect,useRef,useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useCtx } from "../../AppScreen";
 import Avatar from "../../../ui/Avatar";
 import IconButton from "../../../ui/IconButton";
@@ -10,15 +11,20 @@ import leave from '/leave.svg'
 import del from '/delete.svg'
 import back from '/back-one.svg'
 import { WALLPAPERS } from '../../../../wallpaper'
+import { startCall } from '../../CallOverlay';
+import ConfirmDialog, { shouldConfirm } from '../../../ui/ConfirmDialog';
 
 
 export default function (props){
 
-    const {chatID,setChatID,db,chatdata,socket,profiles,userID,typingUsers,report:reportFn,deleteChat,isMobile}=useCtx()
+    const {chatID,setChatID,db,chatdata,socket,profiles,userID,typingUsers,report:reportFn,deleteChat,isMobile,mutedChats}=useCtx()
     let chat=(chatdata)&&chatdata[chatID.id]||{};
     const [showWallpaper,setShowWallpaper]=useState(false);
+    const [showOptions,setShowOptions]=useState(false);
     const [confirmDelete,setConfirmDelete]=useState(false);
-    const option=useRef();
+    const [confirmation,setConfirmation]=useState(null);
+    const mutedUntil = mutedChats && mutedChats[chatID.id];
+    const isMuted = mutedUntil && new Date(mutedUntil).getTime() > Date.now();
     const isOwner = chat.type==='group' && chat.owner && userID.current===chat.owner;
     // Membership must come from the chat doc's own `users` list, not the
     // locally-cached user.Chats array - that cache is populated by separate
@@ -41,36 +47,51 @@ export default function (props){
       ? `${memberCount || 0} member${memberCount === 1 ? '' : 's'}`
       : (otherProfile && otherProfile.username ? `@${otherProfile.username}` : 'Direct message'));
 
-    const leaveChat=()=>{ 
-      console.log("emit")
-      try{
+    const leaveChat=()=> {
+      const action = chat.type === 'group' ? 'leave-group' : 'remove-chat';
+      const proceed = () => {
         socket.current.emit('leaveChat',{id:chatID.id,del:true});
-        option.current.classList.toggle('hidden');
-      }
-    catch(e){console.log(e)}  
+        setShowOptions(false);
+        setConfirmation(null);
+      };
+      if (shouldConfirm(action)) setConfirmation({ action, title: chat.type === 'group' ? 'Leave this group?' : 'Remove this conversation?', message: 'You will leave this group and stop receiving its messages.', onConfirm: proceed });
+      else proceed();
     }
     
     const reportChat=()=>{
-     reportFn(chatID.id,'chat');
+     const proceed = (reason) => { reportFn(chatID.id,'chat', reason); setShowOptions(false); setConfirmation(null); };
+     if (shouldConfirm('report-chat')) setConfirmation({ action: 'report-chat', title: 'Report this conversation?', message: 'Tell us what is concerning about this conversation.', reasonPrompt: 'Reason for reporting (optional)', onConfirm: proceed });
+     else proceed();
     }
     const muteChat=()=>{
-      socket.current.emit('muteChat',chatID.id);
-    }
-    const deleteGroupChat=(e)=>{
-      if(!confirmDelete){
-        e.stopPropagation();
-        setConfirmDelete(true);
+      if (isMuted) {
+        socket.current.emit('unmuteChat', chatID.id);
+        setShowOptions(false);
         return;
       }
-      deleteChat(chatID.id);
-      setConfirmDelete(false);
+      const proceed = (durationMs) => { socket.current.emit('muteChat',{ id: chatID.id, durationMs: durationMs === "forever" ? null : Number(durationMs) }); setShowOptions(false); setConfirmation(null); };
+      const options = [{value: "3600000", label: "For 1 hour"}, {value: "28800000", label: "For 8 hours"}, {value: "604800000", label: "For 1 week"}, {value: "forever", label: "Until I turn it back on"}];
+      if (shouldConfirm('mute-chat')) setConfirmation({ action: 'mute-chat', title: 'Mute this conversation?', message: 'Choose how long notification alerts should stay muted.', durationOptions: options, onConfirm: proceed });
+      else proceed(options[0].value);
+    }
+    const deleteGroupChat=()=>{
+      const proceed = () => { deleteChat(chatID.id); setConfirmation(null); setShowOptions(false); };
+      if (shouldConfirm('delete-group')) setConfirmation({ action: 'delete-group', title: 'Delete this group?', message: 'This permanently removes the group and its messages for all members.', confirmLabel: 'Delete', danger: true, onConfirm: proceed });
+      else proceed();
     }
     useEffect(()=>{
-        if(option.current){
-          option.current.classList.add('hidden');
-        }
+        setShowOptions(false);
         setConfirmDelete(false);
     },[chatID])
+    useEffect(() => {
+      const closeOptions = (event) => {
+        if (!event.target.closest('.message-options-menu') && !event.target.closest('.message-options-trigger')) {
+          setShowOptions(false);
+        }
+      };
+      document.addEventListener('pointerdown', closeOptions);
+      return () => document.removeEventListener('pointerdown', closeOptions);
+    }, []);
     useEffect(()=>{
         if(!confirmDelete) return;
         const t=setTimeout(()=>setConfirmDelete(false),4000);
@@ -78,7 +99,7 @@ export default function (props){
     },[confirmDelete])
    return( 
       <div className="w-full  rounded-t-xl ">
-      <div className="  w-full shadow-sm  border-b dark:border-gray-700  p-2   pl-4 justify-between items-center  h-14 bg-white dark:bg-gray-800 flex">
+      <div className="message-titlebar w-full p-2 pl-4 justify-between items-center h-14 flex">
           
         <div className="flex items-center">
          {isMobile && (
@@ -93,51 +114,69 @@ export default function (props){
           props.setDialog(1);}} className="outline-none  border-none rounded-full h-fit w-fit">
            <Avatar src={chat.img && chat.img.src} kind={chat.type=='group'?'group':'user'} size="sm" />
          </button>
-        <div className="p-2 pt-1 flex flex-col ">
-         <div className="text-sm w-36 text-ellipses font-semibold text-gray-800 dark:text-gray-100">{chat.name||"Unnamed"}</div>
+        <div className="p-2 pt-1 flex flex-col min-w-0">
+        <div className="text-sm w-36 truncate font-semibold text-[var(--text)]">{chat.name||"Unnamed"}</div>
          <div className={`text-xs ${typingStatus ? 'text-[var(--accent-dark)] italic' : 'text-gray-400'}`}>{status}
          </div>
         </div>
         </div>
         <div className="flex items-center">
         {showJoin&&<Button variant="primary" className="mr-2 w-24" onClick={()=>{socket.current.emit("join",[chatID.id])}}>Join</Button>}
+        {chatID.id && membershipKnown && chat.users.includes(userID.current) && (
+          <>
+            <button
+              type="button"
+              title="Start audio call"
+              aria-label="Start audio call"
+              onClick={() => startCall(socket, chat, 'audio')}
+              className="call-action-button mr-1 rounded-full text-[var(--text-muted)]"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7.2 4.2 4.8 6.1c-.7.6-.9 1.6-.5 2.4 2.4 5.1 6.2 8.9 11.3 11.3.8.4 1.8.2 2.4-.5l1.9-2.4c.5-.7.4-1.7-.3-2.2l-2.8-2.1c-.6-.4-1.4-.4-1.9.1l-1.2 1.2a14.5 14.5 0 0 1-3.6-3.6l1.2-1.2c.5-.5.5-1.3.1-1.9L9.4 4.5c-.5-.7-1.5-.8-2.2-.3Z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              title="Start video call"
+              aria-label="Start video call"
+              onClick={() => startCall(socket, chat, 'video')}
+              className="call-action-button mr-1 rounded-full text-[var(--text-muted)]"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3.5" y="6.5" width="11.5" height="11" rx="2" />
+                <path d="m15 10 5-3v10l-5-3Z" />
+              </svg>
+            </button>
+          </>
+        )}
    
-        <IconButton icon={options} alt="Options" onClick={()=>{
-            if(option.current){
-              option.current.classList.toggle('hidden')
-            }
+        <IconButton icon={options} alt="Options" className="message-options-trigger" onClick={()=>{
+            setShowOptions((value) => !value)
           }} />
 
         </div>
     </div>
    
-    <div ref={option} onClick={((event)=>{
-          option.current.classList.toggle('hidden');
-          option.current.removeEventListener('mouseLeave',(event)=>{
-          option.current.classList.toggle('hidden');
-        })})}
-         onMouseLeave={(event)=>{
-          option.current.classList.toggle('hidden');
-         }}
-         className=" p-1 w-40 mt-4 ring-red-100 opacity-95 h-fit z-10 bg-white dark:bg-gray-800 rounded-lg justify-start flex-col shadow-lg fixed right-12 py-2 hidden text-sm text-gray-600 dark:text-gray-200">
-              <button onClick={muteChat} className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-700">
-              <img src={bell}  className="w-4 h-4 dark:invert dark:opacity-80"></img><div>Mute</div></button>
-              <button onClick={(e)=>{e.stopPropagation();setShowWallpaper((v)=>!v);}}  className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-700">
+    {showOptions && createPortal(<div
+         className="message-options-menu p-1 w-48 mt-2 h-fit z-20 rounded-2xl justify-start flex-col text-sm">
+              <button onClick={muteChat} className="message-option rounded-xl px-2 py-2 flex items-center gap-2 w-full">
+              <img src={bell}  className="w-4 h-4 dark:invert dark:opacity-80"></img><div>{isMuted ? "Unmute" : "Mute"}</div></button>
+              <button onClick={(e)=>{e.stopPropagation();setShowOptions(false);setShowWallpaper(true);}}  className="message-option rounded-xl px-2 py-2 flex items-center gap-2 w-full">
               <span className="w-4 h-4 flex items-center justify-center">🖼</span><div>Wallpaper</div></button>
-              <button onClick={reportChat}  className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <button onClick={reportChat}  className="message-option rounded-xl px-2 py-2 flex items-center gap-2 w-full">
               <img src={report}  className="w-4 h-4 dark:invert dark:opacity-80"></img><div>Report</div></button>
-              <button onClick={leaveChat} className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              <button onClick={leaveChat} className="message-option rounded-xl px-2 py-2 flex items-center gap-2 w-full">
               <img src={leave}  className="w-4 h-4 dark:invert dark:opacity-80"></img><div>{(chat.type=='group')?'Leave':'Remove'}</div></button>
               {isOwner && (
-              <button onClick={deleteGroupChat} className="rounded-lg px-2 py-1.5 flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500">
-              <img src={del}  className="w-4 h-4"></img><div>{confirmDelete?'Confirm delete?':'Delete group'}</div></button>
+              <button onClick={deleteGroupChat} className="message-option message-option-danger rounded-xl px-2 py-2 flex items-center gap-2 w-full">
+              <img src={del}  className="w-4 h-4"></img><div>Delete group</div></button>
               )}
 
-    </div>
-    {showWallpaper && (
+    </div>, document.body)}
+    {showWallpaper && createPortal(
       <div
         onMouseLeave={()=>setShowWallpaper(false)}
-        className="p-3 mt-1 w-56 h-fit z-20 bg-white dark:bg-gray-800 rounded-lg shadow-lg fixed right-12 grid grid-cols-3 gap-2"
+        className="wallpaper-menu p-3 w-56 h-fit z-20 rounded-2xl fixed right-12 top-16 grid grid-cols-3 gap-2"
       >
         {WALLPAPERS.map((w)=>(
           <button
@@ -145,11 +184,12 @@ export default function (props){
             title={w.name}
             onClick={()=>{ props.setWallpaper && props.setWallpaper(w.css); setShowWallpaper(false); }}
             className={`h-12 rounded-md border-2 ${ (props.wallpaper||null)===w.css ? 'border-[var(--accent)]' : 'border-transparent'}`}
-            style={{ background: w.css || `url(/background.jpg) center/cover` }}
+            style={{ background: w.css || undefined }}
           />
         ))}
-      </div>
+      </div>, document.body
     )}
+    {confirmation && <ConfirmDialog {...confirmation} onCancel={() => setConfirmation(null)} />}
    </div>
   );
 }

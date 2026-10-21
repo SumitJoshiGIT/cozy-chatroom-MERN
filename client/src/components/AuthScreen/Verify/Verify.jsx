@@ -5,6 +5,7 @@ import Card from "../../ui/Card";
 import Button from "../../ui/Button";
 import { TextField } from "../../ui/TextField";
 import { useToast } from "../../ui/Toast";
+import { clearStoredAuthToken } from "../../../socketAuthToken";
 
 export default function VerificationScreen(props){
    const timeref=useRef(new Date());
@@ -17,7 +18,10 @@ export default function VerificationScreen(props){
            event.preventDefault();
            const otp=ref.current.value;
            const response=await post('/auth/verify',{otp:otp})
-           if(response.status)navigate('/app')
+           if(response.status) {
+             clearStoredAuthToken();
+             navigate('/app');
+           }
            else toast.error(response.message)
          }
 
@@ -34,10 +38,14 @@ export default function VerificationScreen(props){
         }
 
    useEffect(()=>{
+      if (!ref.current) return undefined;
       if(timer>=180){
          ref.current.classList.add('ring-2','ring-red-300');
       }
-      else  setTimeout(()=>setTimer((prev)=>prev+1),1000);
+      else {
+        const timeout = setTimeout(()=>setTimer((prev)=>prev+1),1000);
+        return () => clearTimeout(timeout);
+      }
    },[timer])
 
    const remaining = Math.max(180 - timer, 0);
@@ -48,19 +56,19 @@ export default function VerificationScreen(props){
     <Card className="flex justify-center items-center flex-col p-8 sm:p-10 gap-3 w-full max-w-sm">
 
      <div className="text-center mb-1">
-        <h2 className="text-2xl font-bold text-gray-800">Check your inbox</h2>
-        <p className="text-sm text-gray-400 mt-1">We sent a 6-digit code to your email.</p>
+        <h2 className="text-2xl font-bold text-[var(--text)]">Check your inbox</h2>
+        <p className="text-sm text-[var(--text-muted)] mt-1">We sent a 6-digit code to your email.</p>
      </div>
      <form onSubmit={verifyOTP} className="w-full flex flex-col gap-1">
        <TextField className="w-full text-center tracking-[0.3em] text-lg" placeholder="000000" maxLength={6} ref={ref} type="text" inputMode="numeric" />
-       <div className="text-xs w-full flex justify-end pr-1 text-gray-400">
+       <div className="text-xs w-full flex justify-end pr-1 text-[var(--text-muted)]">
         {remaining > 0 ? `Expires in ${mm}:${ss}` : "Code expired"}
        </div>
        <Button type="submit" className="mt-2 py-2">
           Verify
        </Button>
      </form>
-     <div className="text-sm text-gray-500">Didn't get a code? <a onClick={ResendOTP} className="pl-1 text-[var(--accent-dark)] font-semibold cursor-pointer">Resend</a></div>
+     <div className="text-sm text-[var(--text-muted)]">Didn't get a code? <button type="button" onClick={ResendOTP} className="pl-1 text-[var(--accent-dark)] font-semibold cursor-pointer">Resend</button></div>
   </Card>
   )
 }

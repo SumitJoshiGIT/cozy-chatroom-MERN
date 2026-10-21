@@ -14,10 +14,11 @@ const mongoose = require('mongoose');
 const { passport } = require('./routes/auth/passportSetup');
 const sharedsession = require('express-socket.io-session');
 const { cleanupDemoAccounts } = require('./utils/cleanupDemoAccounts');
+const { vapidPublicKey } = require('./utils/webPush');
 
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
-const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+const clientOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',').map((s) => s.trim()).filter(Boolean);
 
 if (!process.env.DATABASE) throw new Error('DATABASE env var is required');
 if (!process.env.SESSION_SECRET) {
@@ -39,7 +40,7 @@ const server = createServer(app);
 // Attachments are sent base64-encoded over the socket (up to the client's 2MB
 // raw-file cap), which inflates to ~2.7MB plus JSON overhead — comfortably
 // over socket.io's 1MB default, so raise it or uploads near the cap silently fail.
-const io = new Server(server, { cors: { origin: clientOrigin, credentials: true }, maxHttpBufferSize: 5 * 1024 * 1024 });
+const io = new Server(server, { cors: { origin: clientOrigins, credentials: true }, maxHttpBufferSize: 5 * 1024 * 1024 });
 
 const sessionMiddleware = session({
   secret: process.env.SESSION_SECRET || 'dev-only-insecure-secret',
@@ -56,7 +57,7 @@ const sessionMiddleware = session({
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-app.use(cors({ origin: clientOrigin, credentials: true }));
+app.use(cors({ origin: clientOrigins, credentials: true }));
 app.use(express.static(path.join(__dirname, '..', 'client', 'dist')));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cookieParser());
@@ -71,6 +72,7 @@ app.use(authRouter);
 app.use(callsRouter);
 
 app.get('/ping', (req, res) => res.send('pong'));
+app.get('/push/vapidPublicKey', (req, res) => res.json({ key: vapidPublicKey }));
 
 io.on('connection', (socket) => onConnection(socket, io));
 io.on('disconnect', onDisconnection);

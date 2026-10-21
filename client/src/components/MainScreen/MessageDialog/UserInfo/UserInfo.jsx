@@ -10,7 +10,6 @@ import { TextField, TextArea } from "../../../ui/TextField";
 import { useToast } from "../../../ui/Toast";
 import { downloadFile } from "../../../../download";
 import { clearStoredAuthToken } from "../../../../socketAuthToken";
-import background from '/background.jpg'
 import single from '/single.svg'
 import close from '/close.svg'
 export default function (props){
@@ -35,14 +34,11 @@ export default function (props){
     }, [profile]);
 
     const admin=userID.current==profile._id
-    return     <Card className="mt-6 flex-1 flex-col flex">
-    <IconButton icon={close} alt="Close" onClick={()=>setMessageDialog(0)} className="w-fit bg-white fixed m-4 h-fit shadow-sm" />
-    <div className="bg-gray-200 rounded-t-xl pl-10 w-full h-44" style={{
-          backgroundImage:`url(${background})`,
+    return     <Card className="profile-card mt-6 flex-1 flex-col flex">
+    <IconButton icon={close} alt="Close" onClick={()=>setMessageDialog(0)} className="profile-close w-fit absolute top-4 right-4 h-fit" />
+    <div className="profile-cover rounded-t-xl pl-8 w-full h-44">
 
-        }}>
-
-      <div className="relative top-20 border-1 w-fit h-fit flex rounded-full" >
+      <div className="profile-avatar relative top-16 w-fit h-fit flex rounded-full" >
 
         <ImageInput
           src={profile.img ? profile.img.src : single}
@@ -62,7 +58,7 @@ export default function (props){
         />
       </div>
     </div>
-    <div className="min-h-64 mt-8 flex p-4 flex-col gap-2">
+    <div className="profile-details min-h-64 mt-6 flex p-6 flex-col gap-3">
       <TextField
         disabled={!admin}
         onChange={(event) => setName(event.target.value)}
@@ -72,7 +68,7 @@ export default function (props){
           });
         }}
         accentColor={profile.color}
-        inputClassName="text-2xl font-bold w-fit"
+        inputClassName="profile-name text-2xl font-bold w-fit"
         value={useralias}
         placeholder="Your name"
       />
@@ -85,22 +81,21 @@ export default function (props){
             username:username,
           });
         }}
-        inputClassName="text-gray-400 text-sm w-fit"
+        inputClassName="profile-username text-sm w-fit"
         value={`@${username}`}
       />
 
-      <TextArea
-        disabled={!admin}
-        onChange={(event) => setAbout(event.target.value)}
-        onBlur={() => {
-          socket.current.emit("updateProfile", {
-            about: aboutSt,
-          });
-        }}
-        className="mt-2 max-w-md h-20 w-full"
-        value={aboutSt}
-        placeholder="About"
-      />
+      {admin ? (
+        <TextArea
+          onChange={(event) => setAbout(event.target.value)}
+          onBlur={() => socket.current.emit("updateProfile", { about: aboutSt })}
+          className="profile-about mt-2 max-w-md h-20 w-full"
+          value={aboutSt}
+          placeholder="Add a little about yourself…"
+        />
+      ) : aboutSt.trim() ? (
+        <div className="profile-about profile-about-readonly mt-2 max-w-md w-full">{aboutSt}</div>
+      ) : null}
 
       {admin && (
         <Button variant="danger" className="mt-4 self-start" onClick={async () => {

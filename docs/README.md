@@ -6,6 +6,14 @@ whether that's a new contributor, a student studying full-stack architecture, or
 someone prepping for a system-design interview and wants a real (imperfect, evolving)
 codebase to reason about instead of a textbook example.
 
+If you're asking what still separates a production-grade messaging app from this
+project, the honest answer is not "basic chat features" — it's the layers that
+users now expect: richer communication primitives, privacy controls, AI-assisted
+workflows, notification reliability, and stronger moderation and community models.
+The roadmap and feature-gap analysis in [Chapter 15](./15-roadmap.md) give the
+full market-level view; the chapters below explain the code and architecture that
+already exists today.
+
 Each chapter is self-contained but builds on the ones before it. If you're prepping
 for an interview and short on time, read 01, 02, 04, 05, then the whole
 [Interview Prep section](./09-interview-prep.md) (chapters 9–14) — that covers the
