@@ -8,7 +8,7 @@ export default function (props) {
     chatID,
     chatIDRef,
     socket,db,
-    profiles,
+    profiles = {},
     requestProfile,
     chatdata,
     chatCache,
@@ -18,12 +18,13 @@ export default function (props) {
     privateChats,
     setMessageDialog,
     userID,
-    drafts,
+    drafts = {},
   } = useCtx();
   
   const [chatid, setId] = useState(props.id);
-  let chat = chatdata[chatid];
+  let chat = (chatdata && chatdata[chatid]) || {};
   useEffect(()=>{
+  if(!chat._id) return;
   if(chat.type=='private'){
     if(profiles[chat.sender]){
       // A "message yourself" chat's sender is your own id, so this would
@@ -41,11 +42,12 @@ export default function (props) {
         return { ...prev, [chat._id]: chat };
       });
     }
-    else requestProfile(chat.sender);
+    else if (requestProfile) requestProfile(chat.sender);
   }
 },[profiles[chat.sender]])
 
   const onClick = (event) => {
+    if (!chat._id) return;
     setMessageDialog(0);
     setChatID((prev) => {
       return { id: chat._id, type: chat.type };
@@ -129,6 +131,8 @@ export default function (props) {
     ? (latest.uid == userID.current ? "You" : (profiles[latest.uid] ? profiles[latest.uid].name : ""))
     : "";
   const draft = drafts[chat._id];
+
+  if (!chat._id) return null;
 
   return (
     <div
