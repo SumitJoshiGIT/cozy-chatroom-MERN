@@ -1,4 +1,5 @@
 const mongoose=require('mongoose');
+const generateUserAlias = require('../utils/generateUserAlias');
 
 const AutoIncrement = require('mongoose-sequence')(mongoose)
 const Users=new mongoose.Schema
@@ -49,6 +50,13 @@ const Users=new mongoose.Schema
    blocked:{
       ref:'Users',
       type:[mongoose.Schema.Types.ObjectId],
+      default:[]
+   },
+   mutedChats:{
+      type:[new mongoose.Schema({
+         chat:{type:mongoose.Schema.Types.ObjectId, ref:'Chats', required:true},
+         mutedUntil:{type:Date, default:null},
+      }, {_id:false})],
       default:[]},
    color:{
       type:String,
@@ -58,6 +66,16 @@ const Users=new mongoose.Schema
          type:mongoose.Schema.Types.ObjectId,
          ref:'Permissions',
          default:null}
+      ,
+   isDemo:{
+      type:Boolean,
+      default:false,
+      index:true
+   },
+   demoExpiresAt:{
+      type:Date,
+      default:null
+   }
       },
    {timestamps:true}
 )
@@ -72,12 +90,17 @@ function randomColor() {
    return color;
 }
 Users.pre('save',function(next){
-   if (!this.username) this.username = `user_${this._id}`;
+   if (!this.name || !this.username) {
+      const alias = generateUserAlias();
+      if (!this.name) this.name = alias.name;
+      if (!this.username) this.username = alias.username;
+   }
    if (this.isNew) this.color=randomColor();
    next()
-});
+})
 
 Users.index({name:'text',email:'text',username:'text'})
+Users.index({ demoExpiresAt: 1 });
 Users.plugin(AutoIncrement, { inc_field: 'user_id', start_seq: 0 });
 
 

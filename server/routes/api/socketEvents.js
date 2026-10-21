@@ -85,6 +85,15 @@ async function updateLastMessage(cid, message) {
   });
 }
 async function onConnection(socket, io) {
+  let profile = null;
+  const socketLog = (event, details = {}) => {
+    console.info("[socket]", JSON.stringify({
+      event,
+      socketId: socket.id,
+      userId: profile ? String(profile._id) : null,
+      ...details,
+    }));
+  };
   // Every socket.on(...) handler below is async and mostly unguarded. On
   // Node's current default, an unhandled rejection kills the whole process -
   // not just this one request - taking down every connected user. Wrapping
@@ -95,18 +104,31 @@ async function onConnection(socket, io) {
     try {
       await handler(...args);
     } catch (err) {
-      console.log(err);
+      console.error("[socket] handler failed", JSON.stringify({
+        event,
+        socketId: socket.id,
+        userId: profile ? String(profile._id) : null,
+        message: err.message,
+        stack: err.stack,
+      }));
     }
   });
 
-  let profile = null;
   try {
     const tokenUserId = verifyToken(socket.handshake.auth && socket.handshake.auth.token);
     const pid = tokenUserId || socket.handshake.session.passport.user._id;
     profile = await models.UsersModel.findById(pid);
-  } catch (err) {}
+    if (profile && profile.isDemo && profile.demoExpiresAt <= new Date()) profile = null;
+  } catch (err) {
+    console.error("[socket] authentication failed", JSON.stringify({
+      socketId: socket.id,
+      message: err.message,
+      stack: err.stack,
+    }));
+  }
 
   socket.emit("auth", profile ? profile : null);
+  socketLog("auth", { authenticated: !!profile });
 
   if (profile) {
     const chatSet = new Set(profile.Chats.map((chat) => chat.toString()));
@@ -117,17 +139,43 @@ async function onConnection(socket, io) {
       next();
     });
     async function SendMessage(message) {
+      socketLog("sendMessage:received", {
+        cid: message && message.cid,
+        replace: message && message.replace,
+        contentLength: typeof message?.content === "string" ? message.content.length : 0,
+      });
       if (chatSet.has(message.cid)) {
         const parentChat = await models.ChatsModel.findById(message.cid);
+        if (!parentChat) {
+          socket.emit("messageError", {
+            event: "sendMessage",
+            replace: message.replace,
+            message: "This conversation could not be found. Refresh and try again.",
+          });
+          return;
+        }
         if (parentChat && parentChat.type === "private") {
           const otherId = (parentChat.users || []).find((u) => u.toString() !== profile._id.toString());
           if (otherId) {
             const other = await models.UsersModel.findById(otherId, "blocked");
-            if (other && other.blocked.some((b) => b.toString() === profile._id.toString())) return;
+            if (other && other.blocked.some((b) => b.toString() === profile._id.toString())) {
+              socket.emit("messageError", {
+                event: "sendMessage",
+                replace: message.replace,
+                message: "This message could not be delivered.",
+              });
+              return;
+            }
           }
         }
-        if (parentChat && parentChat.type === "group" && !(await canPerform(parentChat, "sendMessages"))) return;
-        console.log(message,"m")
+        if (parentChat.type === "group" && !(await canPerform(parentChat, "sendMessages"))) {
+          socket.emit("messageError", {
+            event: "sendMessage",
+            replace: message.replace,
+            message: "You do not have permission to send messages in this group.",
+          });
+          return;
+        }
         if (message.reply_to){
          if(!await models.MessagesModel.find({
           _id: (message.reply_to),
@@ -157,13 +205,27 @@ async function onConnection(socket, io) {
             replace: message.replace,
             data: [newMessage],
           });
+          socketLog("sendMessage:sent", { cid: message.cid, messageId: String(newMessage._id) });
         } catch (err) {
-          console.log(err);
+          console.error("[socket] sendMessage:failed", err);
+          socket.emit("messageError", {
+            event: "sendMessage",
+            replace: message.replace,
+            message: "Your message could not be saved. Please try again.",
+          });
         }
+      } else {
+        socketLog("sendMessage:rejected", { cid: message && message.cid, reason: "not a member" });
+        socket.emit("messageError", {
+          event: "sendMessage",
+          replace: message && message.replace,
+          message: "This conversation is no longer available. Refresh and try again.",
+        });
       }
     }
 
     socket.on("join",async function ([cid]){
+      if (profile.isDemo) return;
       const oid=(cid);
       let chat=null
       if(!chatSet.has(oid.toString())){
@@ -269,6 +331,7 @@ async function onConnection(socket, io) {
 
     socket.on("search", async (stream) => {
       try {
+        socketLog("search:received", { query: stream && stream.query, target: stream && stream.target, reqId: stream && stream.reqId });
         const escaped = xss(`${stream.query}`).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const term = new RegExp(escaped, "i");
         const chatIds = [...chatSet].map((id) => new ObjectID(id));
@@ -345,8 +408,10 @@ async function onConnection(socket, io) {
         }
 
         socket.emit("searchResults", { results: data, target: stream.target, reqId: stream.reqId });
+        socketLog("search:sent", { count: data.length, target: stream.target, reqId: stream.reqId });
       } catch (err) {
-        console.log(err);
+        console.error("[socket] search:failed", err);
+        socket.emit("searchError", { reqId: stream && stream.reqId, message: "Search failed" });
       }
     });
     socket.on("report", async ({ id, targetType, reason }) => {
@@ -366,6 +431,25 @@ async function onConnection(socket, io) {
     socket.on("typing", ({ cid }) => {
       if (!chatSet.has(cid)) return;
       socket.to(cid).emit("typing", { cid, uid: profile._id.toString() });
+    });
+
+    socket.on("startCall", async ({ cid, kind = "video" } = {}) => {
+      if (!chatSet.has(String(cid))) return;
+      const chat = await models.ChatsModel.findById(cid, "users");
+      if (!chat || !(chat.users || []).some((id) => String(id) === String(profile._id))) return;
+      socket.to(String(cid)).emit("incomingCall", {
+        cid: String(cid),
+        roomName: `lavender-${cid}`,
+        kind: kind === "audio" ? "audio" : "video",
+        caller: {
+          id: String(profile._id),
+          name: profile.name || profile.username || "Lavender user",
+        },
+      });
+    });
+
+    socket.on("endCall", ({ cid } = {}) => {
+      if (chatSet.has(String(cid))) socket.to(String(cid)).emit("callEnded", { cid: String(cid) });
     });
 
     socket.on("blockUser", async ({ id }) => {
@@ -462,6 +546,11 @@ async function onConnection(socket, io) {
       if (!chatSet.has(cid) || !content || !content.trim()) return;
       const message = await models.MessagesModel.findOne({ _id: id, chat: cid });
       if (!message || message.uid.toString() !== profile._id.toString()) return;
+      const editWindowMs = 15 * 60 * 1000;
+      if (Date.now() - new Date(message.createdAt).getTime() > editWindowMs) {
+        socket.emit("messageError", { event: "editMessage", message: "Messages can only be edited for 15 minutes." });
+        return;
+      }
       message.content = xss(content);
       message.edited = true;
       await message.save();
@@ -511,7 +600,26 @@ async function onConnection(socket, io) {
       }
       socket.emit("leaveChat", [id, del]);
     });
-    socket.on("muteChat", (id) => {});
+    socket.on("muteChat", async ({ id, durationMs } = {}) => {
+      if (!id || !chatSet.has(String(id))) return;
+      const chat = await models.ChatsModel.findById(id, "_id");
+      if (!chat) return;
+      const mutedUntil = durationMs === null
+        ? new Date("2099-12-31T23:59:59.999Z")
+        : new Date(Date.now() + Math.max(0, Number(durationMs) || 0));
+      const existing = profile.mutedChats.find((entry) => String(entry.chat) === String(id));
+      if (existing) existing.mutedUntil = mutedUntil;
+      else profile.mutedChats.push({ chat: id, mutedUntil });
+      await profile.save();
+      socket.emit("muteState", { cid: String(id), mutedUntil });
+    });
+
+    socket.on("unmuteChat", async (id) => {
+      if (!id) return;
+      profile.mutedChats = profile.mutedChats.filter((entry) => String(entry.chat) !== String(id));
+      await profile.save();
+      socket.emit("muteState", { cid: String(id), mutedUntil: null });
+    });
 
     socket.on("markSeen", async ({ cid }) => {
       if (!cid || !chatSet.has(cid)) return;
@@ -763,9 +871,20 @@ async function onConnection(socket, io) {
     });
 
     socket.on("createChatPrivate", async (stream) => {
-    
-      let user = await models.UsersModel.findById(stream.cid);
-      if (user && user._id != profile._id && !user.blocked.some((b) => b.toString() === profile._id.toString())) {
+      try {
+        socketLog("createChatPrivate:received", { targetId: stream && stream.cid, replace: stream && stream.replace });
+        let user = await models.UsersModel.findById(stream.cid);
+        if (!user) {
+          socketLog("createChatPrivate:rejected", { targetId: stream && stream.cid, reason: "target not found" });
+          socket.emit("messageError", { event: "createChatPrivate", replace: stream && stream.replace, message: "User not found" });
+          return;
+        }
+        if (user._id.toString() === profile._id.toString()) {
+          socketLog("createChatPrivate:rejected", { targetId: stream.cid, reason: "self chat" });
+          socket.emit("messageError", { event: "createChatPrivate", replace: stream.replace, message: "You cannot message yourself" });
+          return;
+        }
+        if (!Array.isArray(user.blocked) || !user.blocked.some((b) => b.toString() === profile._id.toString())) {
         let data = await models.ChatsModel.findOne({
           type: "private",
           users: { $size: 2, $all: [profile._id, user._id] },
@@ -774,6 +893,7 @@ async function onConnection(socket, io) {
            data = new models.ChatsModel({
             users: [...new Set([profile._id, user._id])],
             type: "private",
+             isDemo: !!profile.isDemo,
           });
           const chat = await data.save();
           chatSet.add(chat._id.toString());
@@ -783,7 +903,16 @@ async function onConnection(socket, io) {
           await profile.save();
           await user.save();
           chat.sender = stream.cid;
+          socketLog("createChatPrivate:created", { cid: String(chat._id), targetId: stream.cid });
+        } else {
+          chatSet.add(data._id.toString());
+          if (!profile.Chats.some((chatId) => chatId.toString() === data._id.toString())) {
+            profile.Chats.push(data._id);
+            await profile.save();
+          }
+          socketLog("createChatPrivate:existing", { cid: String(data._id), targetId: stream.cid });
         }
+        chatSet.add(data._id.toString());
         socket.join(data._id.toString());
         socket.emit(`private.${stream.cid}`,data);
         // A file-only first message (no text) has falsy stream.content -
@@ -796,37 +925,59 @@ async function onConnection(socket, io) {
             attachments: stream.attachments,
             replace: stream.replace,
           });
+        } else {
+          socketLog("createChatPrivate:rejected", { targetId: stream.cid, reason: "blocked by target" });
+          socket.emit("messageError", { event: "createChatPrivate", replace: stream.replace, message: "This user cannot receive messages from you" });
+        }
+      } catch (err) {
+        console.error("[socket] createChatPrivate:failed", err);
+        socket.emit("messageError", {
+          event: "createChatPrivate",
+          replace: stream && stream.replace,
+          message: "Could not create the conversation",
+        });
       }
     });
 
     socket.on("createChat", async (stream) => {
-      let owner = profile._id;
-      let type = "group";
-      let name = xss(stream.name);
-      let users = [...new Set([profile._id, ...(stream.members||[])])];
-      const data = new models.ChatsModel({
-        name: name,
-        users: users,
-        type: type,
-        owner: owner,
-        admins: [owner],
-      });
-      let chat = await data.save();
-      const img = await saveUpload(stream.file, stream.type, stream.imgName, stream.size);
-      if (img) {
-        chat.img = img;
-        chat = await chat.save();
-      }
-      for (const id of users) {
-        let user = await models.UsersModel.findByIdAndUpdate((id), {
-          $push: { Chats: chat._id },
+      try {
+        if (!stream || typeof stream !== "object") {
+          socket.emit("chatError", { message: "Invalid group details." });
+          return;
+        }
+        if (profile.isDemo && (stream.members || []).length) {
+          socket.emit("chatError", { message: "Demo accounts cannot create groups with members." });
+          return;
+        }
+        const owner = profile._id;
+        const users = [...new Set([profile._id.toString(), ...(stream.members || []).map(String)])];
+        const data = new models.ChatsModel({
+          name: xss(stream.name || "").trim(),
+          users,
+          type: "group",
+          owner,
+          admins: [owner],
+          isDemo: !!profile.isDemo,
         });
-        if (user) socket.to(id.toString()).emit(`private.${id}`, chat);
+        let chat = await data.save();
+        const img = await saveUpload(stream.file, stream.type, stream.imgName, stream.size);
+        if (img) {
+          chat.img = img;
+          chat = await chat.save();
+        }
+        for (const id of users) {
+          const user = await models.UsersModel.findByIdAndUpdate(id, { $addToSet: { Chats: chat._id } });
+          if (user) socket.to(id).emit(`private.${id}`, chat);
+        }
+        profile.Chats.addToSet(chat._id);
+        await profile.save();
+        chatSet.add(chat._id.toString());
+        socket.join(chat._id.toString());
+        socket.emit("chat", { type: "chats", chats: [chat] });
+      } catch (error) {
+        console.error("[socket] createChat:failed", error);
+        socket.emit("chatError", { message: "Unable to create the group right now." });
       }
-      profile.Chats.push((chat._id));
-      chatSet.add(chat._id.toString());
-      socket.join(chat._id.toString());
-      socket.emit("chat", { type: "chats", chats: [chat] });
     });
   } else {
     socket.disconnect();

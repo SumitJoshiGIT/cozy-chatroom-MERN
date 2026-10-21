@@ -7,8 +7,12 @@ function sign(payload) {
   return crypto.createHmac('sha256', secret).update(payload).digest('base64url');
 }
 
-function issueToken(userId) {
-  const encoded = Buffer.from(JSON.stringify({ uid: String(userId), exp: Date.now() + TOKEN_TTL_MS })).toString('base64url');
+function issueToken(userId, { ttlMs = TOKEN_TTL_MS, demo = false } = {}) {
+  const encoded = Buffer.from(JSON.stringify({
+    uid: String(userId),
+    exp: Date.now() + ttlMs,
+    ...(demo ? { demo: true } : {}),
+  })).toString('base64url');
   return `${encoded}.${sign(encoded)}`;
 }
 

@@ -41,6 +41,11 @@ const Chats=new mongoose.Schema
     required:true,
     default:"private"
    },
+   isDemo:{
+    type:Boolean,
+    default:false,
+    index:true
+   },
    pinned:{
     default:[],
     ref:'Messages',
@@ -84,7 +89,6 @@ Chats.plugin(AutoIncrement, { inc_field: 'chat_id', start_seq: 0 });
 
 const ChatModel=mongoose.model('Chats',Chats);
 module.exports=ChatModel;
-
 
 
 

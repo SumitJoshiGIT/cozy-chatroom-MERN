@@ -1,17 +1,19 @@
 const express = require('express');
+require('dotenv').config();
 const { createServer } = require('http');
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
 const mongoStore = require('connect-mongo');
 const authRouter = require('./routes/auth/auth');
+const callsRouter = require('./routes/api/calls');
 const path = require('path');
 const cors = require('cors');
-require('dotenv').config();
 const { Server } = require('socket.io');
 const { onConnection, onDisconnection } = require('./routes/api/socketEvents');
 const mongoose = require('mongoose');
 const { passport } = require('./routes/auth/passportSetup');
 const sharedsession = require('express-socket.io-session');
+const { cleanupDemoAccounts } = require('./utils/cleanupDemoAccounts');
 
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
@@ -66,6 +68,7 @@ app.use(passport.session());
 io.use(sharedsession(sessionMiddleware, { autoSave: true }));
 
 app.use(authRouter);
+app.use(callsRouter);
 
 app.get('/ping', (req, res) => res.send('pong'));
 
@@ -78,6 +81,10 @@ app.get('*', (req, res) => {
 });
 
 mongoose.connect(process.env.DATABASE).then(() => {
+  cleanupDemoAccounts().catch((err) => console.error('Initial demo cleanup failed:', err));
+  setInterval(() => {
+    cleanupDemoAccounts().catch((err) => console.error('Scheduled demo cleanup failed:', err));
+  }, 15 * 60 * 1000).unref();
   server.listen(PORT, () => console.log(`listening on port ${PORT}`));
 }).catch((err) => {
   console.error('failed to connect to database', err);
