@@ -57,13 +57,18 @@ test.before(async () => {
   await Promise.all(Object.values(models).map((model) => model.init()));
   server = spawn(process.execPath, ['app.js'], {
     cwd: path.join(__dirname, '..'),
-    env: { ...process.env, PORT, NODE_ENV: 'development', CLIENT_ORIGIN: ORIGIN, UPLOAD_DIR, AUTH_RATE_LIMIT: '1000', DEMO_ENABLED: 'true' },
-    stdio: 'ignore',
+    // Google's strategy throws at startup without these, and CI has no .env.
+    env: {
+      ...process.env, PORT, NODE_ENV: 'development', CLIENT_ORIGIN: ORIGIN, UPLOAD_DIR, AUTH_RATE_LIMIT: '1000', DEMO_ENABLED: 'true',
+      GOOGLE_CLIENT_ID: 'test-client-id', GOOGLE_CLIENT_SECRET: 'test-client-secret', GOOGLE_REDIRECT_URI: `${BASE}/auth/google/oauth/callback`,
+    },
+    stdio: ['ignore', 'ignore', 'inherit'],
   });
   for (let i = 0; i < 50; i++) {
-    if (await fetch(`${BASE}/ping`).then((r) => r.ok, () => false)) break;
+    if (await fetch(`${BASE}/ping`).then((r) => r.ok, () => false)) return;
     await wait(100);
   }
+  throw new Error('The server did not start');
 });
 
 test.beforeEach(async () => {
