@@ -1,5 +1,5 @@
 import option from '/options.svg'
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Titlebar from "./TitleBar";
 
 import Chats from "./Chats";
@@ -9,6 +9,11 @@ import { useCtx } from "../AppScreen";
 const ChatDialogComponent = React.memo(function ({}) {
   const { setChatdata,socket, privateChats, profiles, userID,chatCache,isMobile} = useCtx();
   const [style,setStyle]=useState(1);
+  useEffect(() => {
+    const expand = () => setStyle(0);
+    window.addEventListener("lavender:expand-sidebar", expand);
+    return () => window.removeEventListener("lavender:expand-sidebar", expand);
+  }, []);
 
   // On mobile this is the only screen mounted (see AppScreen.jsx) - it
   // always takes the full screen, and always shows the expanded list

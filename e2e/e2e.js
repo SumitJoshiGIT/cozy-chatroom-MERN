@@ -7,7 +7,7 @@ const bcrypt = require(`${ROOT}/server/node_modules/bcrypt`);
 const models = require(`${ROOT}/server/models/exports`);
 
 const APP = 'http://localhost:5173';
-const API = 'http://localhost:3000';
+const API = 'http://localhost:3100';
 const SHOTS = path.join(__dirname, 'shots');
 fs.mkdirSync(SHOTS, { recursive: true });
 const failures = [];
@@ -113,6 +113,7 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     await page.goto(`${APP}/auth/signin`);
     await page.getByRole('button', { name: 'Try the demo' }).click();
     await page.waitForURL('**/app');
+    await page.getByRole('button', { name: 'Skip tour' }).click();
     await ready(page);
     await page.getByRole('button', { name: 'New group' }).click();
     await page.getByPlaceholder('Name your group').fill('Demo Room');
@@ -136,8 +137,32 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     await page.locator('input').first().fill(code);
     await page.click('button[type=submit]');
     await page.waitForURL('**/app');
-    await ready(page);
-    assert(await models.UsersModel.exists({ email: 'new.person@test.invalid' }), 'account not created');
+
+    const dialog = page.getByRole('dialog');
+    await dialog.getByText('Welcome to Lavender').waitFor();
+    await page.screenshot({ path: `${SHOTS}/tour-welcome.png` });
+    await dialog.getByRole('button', { name: 'Show me around' }).click();
+    await dialog.getByText('Find people').waitFor();
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `${SHOTS}/tour-search.png` });
+    await page.getByPlaceholder('Search ').click({ timeout: 1000 }).then(() => { throw new Error('tour let a click through'); }, () => {});
+    await dialog.getByRole('button', { name: 'Back' }).click();
+    await dialog.getByText('Welcome to Lavender').waitFor();
+    await dialog.getByRole('button', { name: 'Show me around' }).click();
+    for (const title of ['Find people', 'Start a group', 'Keep your messages private', 'Make it yours']) {
+      await dialog.getByText(title).waitFor();
+      await dialog.getByRole('button', { name: 'Next' }).click();
+    }
+    await dialog.getByText("You're all set").waitFor();
+    await dialog.getByRole('button', { name: 'Get started' }).click();
+    await dialog.waitFor({ state: 'detached' });
+    await page.waitForTimeout(300);
+    const created = await models.UsersModel.findOne({ email: 'new.person@test.invalid' });
+    assert(created, 'account not created');
+    assert(created.showTutorial === false, 'tour completion not saved');
+    await reload(page);
+    await page.waitForTimeout(800);
+    assert(await dialog.count() === 0, 'tour came back after reload');
     await page.context().close();
   });
 
@@ -517,6 +542,26 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     await entity(f, 'Grace').filter({ hasText: 'from my new device' }).waitFor();
     pages = { a, b };
     await Promise.all([f, g, other].map((page) => page.context().close()));
+  });
+
+  await check('the tour fits a phone screen and is skipped with Escape', async () => {
+    const page = await open(browser, { width: 375, height: 700 });
+    await page.goto(`${APP}/auth/signin`);
+    await page.getByRole('button', { name: 'Try the demo' }).click();
+    await page.waitForURL('**/app');
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: 'Show me around' }).click();
+    for (const title of ['Find people', 'Start a group']) {
+      await dialog.getByText(title).waitFor();
+      await page.waitForTimeout(300);
+      const box = await dialog.boundingBox();
+      assert(box.x >= 0 && box.x + box.width <= 375 && box.y >= 0 && box.y + box.height <= 700, `${title} card off screen: ${JSON.stringify(box)}`);
+      await dialog.getByRole('button', { name: 'Next' }).click();
+    }
+    await page.screenshot({ path: `${SHOTS}/tour-mobile.png` });
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'detached' });
+    await page.context().close();
   });
 
   await check('reconnects after a network drop and keeps receiving', async () => {

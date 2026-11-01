@@ -823,6 +823,11 @@ function onConnection(socket, io) {
     ack(Object.fromEntries(users.map((u) => [String(u._id), u.e2eePublicKey || null])));
   });
 
+  socket.on("tutorialDone", async () => {
+    await models.UsersModel.findByIdAndUpdate(profile._id, { showTutorial: false });
+    socket.to(userRoom(selfId)).emit("tutorialDone");
+  });
+
   socket.on("blockUser", async ({ id } = {}) => {
     if (!isId(id) || id === selfId) return;
     await updateSelf({ $addToSet: { blocked: id } });

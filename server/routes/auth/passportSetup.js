@@ -47,7 +47,7 @@ async function ValidateOtp(req,done) {
         req.session.otp=null;
         return done(null,false,{status:false,message:"User already exists"});
       }
-      const user=await Users({email:pending.email,password:pending.password});
+      const user=await Users({email:pending.email,password:pending.password,showTutorial:true});
       await user.save();
       req.session.otp=null;
       return done(null,{_id:user._id});
@@ -132,7 +132,7 @@ async function GoogleCallback(accessToken,refreshToken,profile,done) {
       if(user){
         user.sub=json.sub;
       }else{
-        user=new Users({name:json.name,email,sub:json.sub});
+        user=new Users({name:json.name,email,sub:json.sub,showTutorial:true});
       }
       await user.save();
     }

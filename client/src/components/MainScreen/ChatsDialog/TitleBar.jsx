@@ -30,8 +30,8 @@ export default function (props){
         </div>
         <div className="flex items-center gap-1">
           <IconButton icon={starred} alt="Starred messages" onClick={()=>{setMessageDialog(6)}} />
-          <SettingsButton/>
-          <IconButton icon={add} alt="New group" onClick={()=>{setMessageDialog(4)}} />
+          <span data-tour="settings"><SettingsButton/></span>
+          <span data-tour="new-group"><IconButton icon={add} alt="New group" onClick={()=>{setMessageDialog(4)}} /></span>
         </div>
       </div>
     );

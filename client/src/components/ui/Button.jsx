@@ -1,3 +1,5 @@
+import { forwardRef } from 'react';
+
 const variants = {
   primary: 'text-white bg-[var(--accent)] hover:bg-[var(--accent-dark)] shadow-[0_2px_8px_-2px_var(--accent)]',
   dark: 'bg-gray-900 text-white hover:bg-black',
@@ -7,9 +9,10 @@ const variants = {
   ghost: 'bg-[var(--surface-muted)] text-[var(--text-muted)] hover:bg-[var(--accent-light)] hover:text-[var(--text)]',
 };
 
-export default function Button({ variant = 'primary', className = '', children, as: As = 'button', disabled, ...props }) {
+const Button = forwardRef(function Button({ variant = 'primary', className = '', children, as: As = 'button', disabled, ...props }, ref) {
   return (
     <As
+      ref={ref}
       aria-disabled={disabled || undefined}
       disabled={As === 'button' ? disabled : undefined}
       className={`rounded-full px-3 py-1 text-sm font-semibold inline-flex items-center justify-center transition-all active:scale-95
@@ -20,4 +23,6 @@ export default function Button({ variant = 'primary', className = '', children, 
       {children}
     </As>
   );
-}
+});
+
+export default Button;

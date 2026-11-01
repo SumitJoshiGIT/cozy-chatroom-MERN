@@ -144,6 +144,16 @@ export default function Settings(props) {
           </div>
         </Section>
 
+        <Button
+          variant="ghost"
+          className="w-full py-2 mb-2"
+          onClick={() => {
+            setMessageDialog(0);
+            window.dispatchEvent(new CustomEvent("lavender:start-tour"));
+          }}
+        >
+          Replay tutorial
+        </Button>
         <Button variant="danger" className="w-full py-2" onClick={signOut}>
           Log out
         </Button>

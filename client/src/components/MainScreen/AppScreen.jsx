@@ -19,6 +19,7 @@ import { readAllDrafts, persistDrafts } from "../../drafts";
 import { clearLocalData } from "../../session";
 import { createE2ee, LOCKED_TEXT } from "../../e2ee/engine";
 const CallOverlay = lazy(() => import("./CallOverlay"));
+const Tutorial = lazy(() => import("./Tutorial"));
 // Tokens last 12 hours; replacing them at 6 keeps a long-lived tab covered.
 const MEDIA_TOKEN_REFRESH_MS = 6 * 60 * 60 * 1000;
 const Context = createContext();
@@ -105,6 +106,16 @@ function ChatScreen(props) {
   const pendingAuth = useRef({ received: false, data: null });
   const e2ee = useRef(null);
   const [e2eeStatus, setE2eeStatus] = useState("loading");
+  const [showTutorial, setShowTutorial] = useState(false);
+  const closeTutorial = useCallback(() => {
+    setShowTutorial(false);
+    socket.current.emit("tutorialDone");
+  }, []);
+  useEffect(() => {
+    const start = () => setShowTutorial(true);
+    window.addEventListener("lavender:start-tour", start);
+    return () => window.removeEventListener("lavender:start-tour", start);
+  }, []);
   const e2eeReady = useRef(null);
   if (!e2eeReady.current) {
     let resolve;
@@ -201,6 +212,7 @@ function ChatScreen(props) {
       console.error("[chat] message failed", { event, replace, message });
       markSendFailed(replace, message);
     });
+    socket.current.on("tutorialDone", () => setShowTutorial(false));
     socket.current.on("e2eeKeyChanged", ({ publicKey }) => {
       if (e2ee.current) e2ee.current.load(publicKey);
     });
@@ -803,6 +815,7 @@ function ChatScreen(props) {
           setContactsLoaded(true);
           // See the "profile" handler above for why this needs cache-busting and the already-prefixed guard.
           if (data.img && !data.img.src.startsWith(apiOrigin)) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
+          setShowTutorial(!!data.showTutorial);
           if (data.blocked) setBlocked(new Set(data.blocked.map(String)));
           if (data.starred) setStarred(new Set(data.starred.map(String)));
           setMutedChats(Object.fromEntries(
@@ -952,6 +965,7 @@ function ChatScreen(props) {
       </div>
       <Suspense fallback={null}>
         <CallOverlay socket={socket} />
+        {showTutorial && e2eeStatus !== "loading" && <Tutorial onClose={closeTutorial} />}
       </Suspense>
     </Context.Provider>
   );

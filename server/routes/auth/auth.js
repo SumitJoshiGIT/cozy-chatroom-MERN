@@ -48,6 +48,7 @@ authRouter.post('/auth/demo', demoLimiter, async (req, res) => {
             password: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10),
             isDemo: true,
             demoExpiresAt: expiresAt,
+            showTutorial: true,
         });
         return res.json({ status: true, token: issueToken(user._id, { ttlMs: demoTtlMs, demo: true }), expiresAt });
     } catch (err) {

@@ -77,6 +77,11 @@ const Users=new mongoose.Schema
       default:null
    },
    // Bearer tokens issued before this moment are rejected (set on logout).
+   // Set when an account is created, so existing users never see the tour.
+   showTutorial:{
+      type:Boolean,
+      default:false,
+   },
    // End-to-end encryption. The private key only reaches the server inside this
    // backup, encrypted with a passphrase the server never sees.
    e2eePublicKey:{
