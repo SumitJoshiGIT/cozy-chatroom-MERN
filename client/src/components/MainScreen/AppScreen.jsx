@@ -5,26 +5,57 @@ import {
   useEffect,
   useRef,
   createContext,
-  useMemo,
+  useCallback,
   useContext,
+  Suspense,
+  lazy,
 } from "react";
 import { io } from "socket.io-client";
 import { useNavigate } from "react-router-dom";
 import { apiOrigin } from "../../apiOrigin";
-import { captureAuthTokenFromUrl, getStoredAuthToken } from "../../socketAuthToken";
-import CallOverlay from "./CallOverlay";
+import { captureAuthTokenFromUrl, captureInviteFromUrl, clearStoredAuthToken, getStoredAuthToken, takeInvite } from "../../socketAuthToken";
 import { useToast } from "../ui/Toast";
+import { readAllDrafts, persistDrafts } from "../../drafts";
+import { clearLocalData } from "../../session";
+const CallOverlay = lazy(() => import("./CallOverlay"));
+// Tokens last 12 hours; replacing them at 6 keeps a long-lived tab covered.
+const MEDIA_TOKEN_REFRESH_MS = 6 * 60 * 60 * 1000;
 const Context = createContext();
 
 function ChatScreen(props) {
   const toast = useToast();
   const [profiles, setProfiles] = useState({});
+  const profilesRef = useRef(profiles);
+  profilesRef.current = profiles;
   const [chatID, setChatID] = useState({ id: false, type: null });
   const chatIDRef = useRef(chatID);
   useEffect(() => {
     chatIDRef.current = chatID;
   }, [chatID]);
   const [Messages, setMessages] = useState({});
+  // The socket listeners below are registered once, so they must read
+  // current state through refs rather than their captured first render.
+  const messagesRef = useRef(Messages);
+  messagesRef.current = Messages;
+  const requestedProfiles = useRef(new Set());
+  const hasMoreHistory = useRef({});
+  const resyncInterval = useRef(null);
+  const [mediaToken, setMediaToken] = useState(null);
+  const mediaTokenAt = useRef(0);
+  const dbRef = useRef(null);
+  const inviteReady = useRef({ authed: false, listening: false });
+  const [drafts, setDrafts] = useState(() => readAllDrafts());
+  const setDraft = useCallback((chatId, text) => {
+    if (!chatId) return;
+    setDrafts((prev) => {
+      if ((prev[chatId] || "") === (text || "")) return prev;
+      const next = { ...prev };
+      if (text && text.trim()) next[chatId] = text;
+      else delete next[chatId];
+      persistDrafts(next);
+      return next;
+    });
+  }, []);
   const [chatdata, setChatdata] = useState({});
   const [contacts, setContacts] = useState(new Set());
   const [starred, setStarred] = useState(new Set());
@@ -56,22 +87,65 @@ function ChatScreen(props) {
   const scrollable = useRef(null);
   const socket = useRef(null);
   const pendingAuth = useRef({ received: false, data: null });
+  const requestProfile = useCallback((uid) => {
+    if (!uid || requestedProfiles.current.has(String(uid))) return;
+    requestedProfiles.current.add(String(uid));
+    socket.current.emit("getProfile", { uid: String(uid) });
+  }, []);
+  const offlineNotified = useRef(false);
+  const patchChat = useCallback((cid, patch) => {
+    const current = chatCache.current.chats[cid];
+    if (!current) return;
+    const updated = { ...current, ...patch(current) };
+    chatCache.current.chats = { ...chatCache.current.chats, [cid]: updated };
+    setChatdata(chatCache.current.chats);
+  }, []);
   if (socket.current === null) {
     captureAuthTokenFromUrl();
+    captureInviteFromUrl();
     socket.current = io(apiOrigin, {
       withCredentials: true,
       transports: ["websocket"],
+      // Connected from the mount effect below, so no event can reach a
+      // component React hasn't committed yet.
+      autoConnect: false,
       reconnection: true,
-      reconnectionAttempts: 4,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnectionDelayMax: 10000,
       timeout: 5000,
       auth: (cb) => cb({ token: getStoredAuthToken() }),
     });
     // The server emits auth during the initial handshake. Keep it until the
     // database-backed initialization below has registered the real handler.
     socket.current.on("auth", (data) => {
+      if (data) userID.current = data._id;
       pendingAuth.current = { received: true, data };
+    });
+    socket.current.on("mediaToken", (token) => {
+      // Attachment URLs embed the token, so swapping it needlessly would
+      // reload every image and restart any video that's playing.
+      if (Date.now() - mediaTokenAt.current < MEDIA_TOKEN_REFRESH_MS) return;
+      mediaTokenAt.current = Date.now();
+      setMediaToken(token);
+    });
+    // Ended from another device, or this session was revoked.
+    socket.current.on("loggedOut", async () => {
+      clearStoredAuthToken();
+      socket.current.disconnect();
+      await clearLocalData(dbRef.current);
+      navigate("/auth/signin");
+    });
+    socket.current.on("inviteJoined", ({ cid }) => {
+      toast.success("You joined the group.");
+      setMessageDialog(0);
+      setChatID({ id: cid, type: "group" });
+    });
+    socket.current.on("profileError", ({ message }) => toast.error(message));
+    socket.current.on("chatError", ({ message }) => toast.error(message));
+    socket.current.on("connect", () => {
+      if (offlineNotified.current) toast.success("Back online.");
+      offlineNotified.current = false;
     });
     socket.current.on("messageError", ({ event, replace, message }) => {
       console.error("[chat] message failed", { event, replace, message });
@@ -90,23 +164,46 @@ function ChatScreen(props) {
       });
     });
     socket.current.on("connect_error", () => {
+      if (offlineNotified.current) return;
+      offlineNotified.current = true;
       toast.error("Lavender could not reach the server. We’ll keep trying.");
     });
     socket.current.on("disconnect", (reason) => {
-      if (reason !== "io client disconnect") {
+      if (reason !== "io client disconnect" && !offlineNotified.current) {
+        offlineNotified.current = true;
         toast.info("You’re offline for a moment. Messages will resume when connected.");
       }
     });
   }
 
+  // Without this, leaving /app (or logging out by a route change) would keep
+  // a socket and the resync timer alive behind the sign-in screen.
+  useEffect(() => {
+    if (socket.current.disconnected) socket.current.connect();
+    const refreshMedia = setInterval(() => socket.current.emit("getMediaToken"), MEDIA_TOKEN_REFRESH_MS);
+    return () => {
+      clearInterval(resyncInterval.current);
+      clearInterval(refreshMedia);
+      socket.current.disconnect();
+    };
+  }, []);
+
   const [db, setDb] = useState(null);
   useEffect(() => {
     if (!db) {
-      console.log("WARNING:");
-      const openRequest = indexedDB.open("ChatApp", 5);
+      const openRequest = indexedDB.open("ChatApp", 6);
 
       openRequest.onupgradeneeded = (event) => {
         const db = event.target.result;
+        // Older builds cached other people's full records (password hashes
+        // included) and messages with now-outdated attachment paths. Both
+        // refill from the server.
+        if (event.oldVersion > 0 && event.oldVersion < 6) {
+          ["profiles", "messages"].forEach((store) => {
+            if (db.objectStoreNames.contains(store)) db.deleteObjectStore(store);
+          });
+        }
+        // Read after the deletions above: objectStoreNames is a snapshot.
         const names = db.objectStoreNames;
         if (!names.contains("meta"))
           db.createObjectStore("meta", { keyPath: "_id" });
@@ -128,8 +225,8 @@ function ChatScreen(props) {
       openRequest.onsuccess = async (event) => {
         const openedDb = event.target.result;
         openedDb.onversionchange = () => openedDb.close();
+        dbRef.current = openedDb;
         setDb(openedDb);
-        console.log("Indeasync xedDB has been created");
       };
     } else {
       db.onversionchange = () => db.close();
@@ -152,7 +249,6 @@ function ChatScreen(props) {
               .filter((entry) => !entry.mutedUntil || new Date(entry.mutedUntil).getTime() > Date.now())
               .map((entry) => [String(entry.chat), entry.mutedUntil])
           ));
-          console.log("Connected as:", user_id);
         }
 
         // Attach onsuccess synchronously, in the same tick as creating each
@@ -192,16 +288,24 @@ function ChatScreen(props) {
             const store = {};
             data.forEach((chat) => {
               if (chat.type == "private") {
-                chat.users.forEach((uid) => {
-                  if (uid != userID.current) data.sender = uid;
-                });
+                const other = chat.users.find((uid) => uid != userID.current) ?? userID.current;
+                chat.sender = other;
+                privateChats.current[other] = chat._id;
               }
               store[chat._id] = chat;
             });
             chatCache.current["chats"] = store;
 
             socket.current.on(`messages`, async (stream) => {
-              setLoadedChats((prev) => new Set(prev).add(stream.id));
+              // Only a real fetch proves the history is here. A lone live
+              // message must not mark the chat loaded, or opening it later
+              // would show that one message and never fetch the rest.
+              if (stream.mode || stream.replace) setLoadedChats((prev) => new Set(prev).add(stream.id));
+              if (stream.mode === "before") hasMoreHistory.current[stream.id] = !!stream.hasMore;
+              if (!stream.mode && chatIDRef.current.id !== stream.id) {
+                const incoming = (stream.data || []).filter((m) => m.uid != userID.current).length;
+                if (incoming) patchChat(stream.id, (chat) => ({ unreadCount: (chat.unreadCount || 0) + incoming }));
+              }
               const store = {};
               if (stream.data) {
                 let dat = stream.data;
@@ -212,8 +316,7 @@ function ChatScreen(props) {
                       .objectStore("messages")
                       .put(data);
                     store[data.mid] = data;
-                    if (!profiles[data.uid])
-                      socket.current.emit("getProfile", { uid: data.uid });
+                    requestProfile(data.uid);
                   })
                 );
                // console.log("recieved", dat);
@@ -234,6 +337,9 @@ function ChatScreen(props) {
                       sourceKey = Object.keys(store2).find((k) => store2[k]?.[stream.replace]);
                     }
                     if (sourceKey) {
+                      // Keeps the React key stable across the pending ->
+                      // permanent id swap so the bubble doesn't remount.
+                      dat.forEach((message) => { message.clientId = stream.replace; });
                       const migrated = { ...(store2[stream.id] || {}), ...store2[sourceKey] };
                       delete migrated[stream.replace];
                       if (sourceKey !== stream.id) delete store2[sourceKey];
@@ -269,7 +375,7 @@ function ChatScreen(props) {
               db.transaction("chats", "readwrite")
                 .objectStore("chats")
                 .delete(id);
-              const messages = Object.values(Messages[id] || {});
+              const messages = Object.values(messagesRef.current[id] || {});
               messages.forEach((message) => {
                 const t = db
                   .transaction("messages", "readwrite")
@@ -281,6 +387,9 @@ function ChatScreen(props) {
                 delete data[id];
                 return { ...data };
               });
+              const remaining = { ...chatCache.current.chats };
+              delete remaining[id];
+              chatCache.current.chats = remaining;
             };
 
             socket.current.on("leaveChat", ([id, del]) => {
@@ -422,12 +531,11 @@ function ChatScreen(props) {
                 setProfiles((prev) => {
                   const obj = { ...prev };
                   obj[data._id] = { ...(obj[data._id] || {}), ...data };
+                  // Broadcasts carry only the changed fields, so cache the
+                  // merged record rather than overwriting it with a fragment.
+                  db.transaction("profiles", "readwrite").objectStore("profiles").put(obj[data._id]);
                   return obj;
                 });
-                await db
-                  .transaction("profiles", "readwrite")
-                  .objectStore("profiles")
-                  .put(data);
               }
             });
 
@@ -442,15 +550,23 @@ function ChatScreen(props) {
                   try {
                     // See the "profile" handler above for why this needs cache-busting and the already-prefixed guard.
                     if (data.img && !data.img.src.startsWith(apiOrigin)) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
+                    // A pushed chat doc has neither the sidebar's profile-derived
+                    // fields nor the local unread count, so merge over the cache.
+                    const cached = chatCache.current.chats[data._id];
+                    if (cached) {
+                      const fresh = data;
+                      data = { ...cached, ...fresh };
+                      if (fresh.unreadCount === undefined) data.unreadCount = cached.unreadCount || 0;
+                    }
                     if (data.type == "private") {
-                      data.users.forEach((uid) => {
-                        if (uid != userID.current) {
-                          privateChats.current[uid] = data._id;
-                          data.sender = uid;
-                          if (!profiles[uid])
-                            socket.current.emit("getProfile", { uid: uid });
-                        }
-                      });
+                      // A "message yourself" chat has no other member.
+                      const other = data.users.find((uid) => uid != userID.current) ?? userID.current;
+                      privateChats.current[other] = data._id;
+                      data.sender = other;
+                      if (profilesRef.current[other]) {
+                        const { _id, createdAt, updatedAt, ...profileFields } = profilesRef.current[other];
+                        data = { ...data, ...profileFields, ...(other === userID.current ? { name: "Saved Messages" } : {}) };
+                      } else requestProfile(other);
                     } else if (datagroup.type == "join") {
                       user.Chats.push(data._id);
                       await db
@@ -515,7 +631,10 @@ function ChatScreen(props) {
                 // reconnect after being offline in many chats doesn't fire
                 // a burst of simultaneous requests.
                 (datagroup.changed || [])
-                  .filter((data) => data.unreadCount > 0)
+                  // Past the server's 100-row cap this would fetch the oldest
+                  // unread rows and leave a gap; opening the chat loads the
+                  // newest page instead.
+                  .filter((data) => data.unreadCount > 0 && data.unreadCount <= 100)
                   .forEach((data, idx) => {
                     setTimeout(() => {
                       socket.current.emit("messages", { cid: data._id, mode: "after", cursorMid: data.lastReadMid });
@@ -528,9 +647,7 @@ function ChatScreen(props) {
               contactsReadyRef.current = true;
               setContactsLoaded(true);
               setContacts(new Set(data));
-              data.forEach((uid) => {
-                if (!profiles[uid]) socket.current.emit("getProfile", { uid });
-              });
+              data.forEach(requestProfile);
             });
 
             // The server resolves the socket's profile asynchronously before
@@ -566,15 +683,22 @@ function ChatScreen(props) {
               emitUntilAcked("chats", { type: "sync", known: buildKnownManifest() }, { current: false });
               socket.current.emit("contacts", {});
               if (chatIDRef.current.id) {
-                const openMessages = Object.values(Messages[chatIDRef.current.id] || {});
-                const localMax = openMessages.length ? Math.max(...openMessages.map((m) => m.mid)) : null;
+                const openMessages = Object.values(messagesRef.current[chatIDRef.current.id] || {});
+                const mids = openMessages.map((m) => m.mid).filter((mid) => typeof mid === "number");
+                const localMax = mids.length ? Math.max(...mids) : null;
                 socket.current.emit("messages", { cid: chatIDRef.current.id, mode: localMax != null ? "after" : "before", cursorMid: localMax });
               }
             });
-            const resyncInterval = setInterval(() => {
+            socket.current.on("chatRead", ({ cid }) => {
+              patchChat(cid, () => ({ unreadCount: 0 }));
+            });
+            clearInterval(resyncInterval.current);
+            resyncInterval.current = setInterval(() => {
               socket.current.emit("chats", { type: "sync", known: buildKnownManifest() });
             }, 5 * 60 * 1000);
             setChatdata(chatCache.current["chats"] || {});
+            inviteReady.current.listening = true;
+            redeemInvite();
           };
 
           p.onsuccess = (event) => {
@@ -590,8 +714,23 @@ function ChatScreen(props) {
           };
       };
 
+      // Needs both a signed-in socket and the "chat" listener above; a session
+      // that isn't signed in keeps the invite for after the redirect.
+      const redeemInvite = () => {
+        if (!inviteReady.current.authed || !inviteReady.current.listening) return;
+        const code = takeInvite();
+        if (code) socket.current.emit("joinByInvite", { code });
+      };
+
       const handleAuth = async (data) => {
         pendingAuth.current = { received: false, data: null };
+        // A session that ended without a logout can leave another account's
+        // history cached here - never show it to whoever signs in next.
+        if (data && user._id && user._id !== data._id) {
+          await clearLocalData(db);
+          window.location.reload();
+          return;
+        }
         user = { ...user, ...data };
         if (data) {
           // A valid new account can have no chats yet. Mark the initial
@@ -602,6 +741,12 @@ function ChatScreen(props) {
           // See the "profile" handler above for why this needs cache-busting and the already-prefixed guard.
           if (data.img && !data.img.src.startsWith(apiOrigin)) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
           if (data.blocked) setBlocked(new Set(data.blocked.map(String)));
+          if (data.starred) setStarred(new Set(data.starred.map(String)));
+          setMutedChats(Object.fromEntries(
+            (data.mutedChats || [])
+              .filter((entry) => !entry.mutedUntil || new Date(entry.mutedUntil).getTime() > Date.now())
+              .map((entry) => [String(entry.chat), entry.mutedUntil])
+          ));
           db.transaction("meta", "readwrite")
             .objectStore("meta")
             .put({ _id: "user", data: user });
@@ -610,20 +755,9 @@ function ChatScreen(props) {
           setProfiles((prev) => {
             return { ...prev, ...{ [user_id]: user } };
           });
-          let lastupdated = db
-            .transaction("meta")
-            .objectStore("meta")
-            .get("chat");
-          lastupdated.onsuccess = () => {
-            console.log("succeded");
-          };
-          lastupdated.onerror = () => {
-            console.log("error");
-          };
-
-          console.log(lastupdated);
           userID.current = user_id;
-          console.log("Connected as:", user_id);
+          inviteReady.current.authed = true;
+          redeemInvite();
         } else {
           socket.current.disconnect();
           navigate("/auth/signin");
@@ -661,8 +795,11 @@ function ChatScreen(props) {
         scrollable,
         chatID,
         chatIDRef,
-        requestProfile: (uid) => socket.current.emit("getProfile", { uid }),
-        drafts: {},
+        requestProfile,
+        hasMoreHistory,
+        mediaToken,
+        drafts,
+        setDraft,
         starred,
         starredMessages,
         toggleStar: (id) => socket.current.emit("toggleStar", { id }),
@@ -717,7 +854,9 @@ function ChatScreen(props) {
         {(!isMobile || (!chatID.id && messageDialog === 0)) && <ChatDialog />}
         {(!isMobile || chatID.id || messageDialog !== 0) && <MessageDialog />}
       </div>
-      <CallOverlay socket={socket} />
+      <Suspense fallback={null}>
+        <CallOverlay socket={socket} />
+      </Suspense>
     </Context.Provider>
   );
 }

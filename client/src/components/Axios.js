@@ -1,9 +1,9 @@
 import axios from 'axios';
 import { apiOrigin } from '../apiOrigin';
 
-export async function post(endpoint, body) {
+export async function post(endpoint, body, headers) {
   try {
-    const response = await axios.post(`${apiOrigin}${endpoint}`, body, { withCredentials: true });
+    const response = await axios.post(`${apiOrigin}${endpoint}`, body, { withCredentials: true, headers });
     return response.data;
   } catch (error) {
     console.error("Error making POST request:", error);

@@ -80,6 +80,8 @@ const Messages=new mongoose.Schema
 // Messages.jsx), this index is just what reclaims the DB record/storage.
 Messages.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 Messages.index({content:'text'})
+Messages.index({chat:1,mid:-1})
+Messages.index({'attachments.src':1})
 Messages.plugin(AutoIncrement, { inc_field: 'mid', start_seq: 0 });
 
 const MessageModel=mongoose.model('Messages',Messages);

@@ -3,15 +3,20 @@ import { createPortal } from "react-dom";
 import { useCtx } from "../../AppScreen";
 import Avatar from "../../../ui/Avatar";
 import IconButton from "../../../ui/IconButton";
-import Button from "../../../ui/Button";
 import options from '/options.svg'
 import bell from '/bell.svg'
 import report from '/report.svg'
 import leave from '/leave.svg'
 import del from '/delete.svg'
 import back from '/back-one.svg'
+import close from '/close.svg'
+import up from '/up.svg'
+import down from '/down.svg'
+import searchIcon from '/search.svg'
+import forwardIcon from '/forward.svg'
+import copyIcon from '/copy.svg'
 import { WALLPAPERS } from '../../../../wallpaper'
-import { startCall } from '../../CallOverlay';
+import { startCall } from '../../startCall';
 import ConfirmDialog, { shouldConfirm } from '../../../ui/ConfirmDialog';
 
 
@@ -21,6 +26,7 @@ export default function (props){
     let chat=(chatdata)&&chatdata[chatID.id]||{};
     const [showWallpaper,setShowWallpaper]=useState(false);
     const [showOptions,setShowOptions]=useState(false);
+    const [showDisappearing,setShowDisappearing]=useState(false);
     const [confirmDelete,setConfirmDelete]=useState(false);
     const [confirmation,setConfirmation]=useState(null);
     const mutedUntil = mutedChats && mutedChats[chatID.id];
@@ -33,7 +39,6 @@ export default function (props){
     // Only render the button once chat.users has actually loaded, so we
     // never flash it during the moment chatdata hasn't populated yet.
     const membershipKnown = Array.isArray(chat.users);
-    const showJoin = chatID.type!='user' && membershipKnown && !chat.users.includes(userID.current);
 
     const otherProfile = chat.type !== 'group' ? profiles[chat.sender] : null;
     const memberCount = chat.users && chat.users.length;
@@ -47,6 +52,21 @@ export default function (props){
       ? `${memberCount || 0} member${memberCount === 1 ? '' : 's'}`
       : (otherProfile && otherProfile.username ? `@${otherProfile.username}` : 'Direct message'));
 
+    const DISAPPEARING_OPTIONS = [
+      { label: 'Off', value: 0 },
+      { label: '24 hours', value: 86400 },
+      { label: '7 days', value: 604800 },
+      { label: '90 days', value: 7776000 },
+    ];
+    const setDisappearing = (value) => {
+      socket.current.emit('setDisappearing', { cid: chatID.id, duration: value || null });
+      setShowDisappearing(false);
+    };
+    const disappearingLabel = (DISAPPEARING_OPTIONS.find((o) => o.value === chat.disappearingDuration) || {}).label;
+    const isGroupAdmin = (chat.admins||[]).includes(userID.current) || chat.owner===userID.current;
+    const canSetDisappearing = chat.type !== 'group' || isGroupAdmin;
+    const isMember = membershipKnown && chat.users.includes(userID.current);
+
     const leaveChat=()=> {
       const action = chat.type === 'group' ? 'leave-group' : 'remove-chat';
       const proceed = () => {
@@ -54,7 +74,7 @@ export default function (props){
         setShowOptions(false);
         setConfirmation(null);
       };
-      if (shouldConfirm(action)) setConfirmation({ action, title: chat.type === 'group' ? 'Leave this group?' : 'Remove this conversation?', message: 'You will leave this group and stop receiving its messages.', onConfirm: proceed });
+      if (shouldConfirm(action)) setConfirmation({ action, title: chat.type === 'group' ? 'Leave this group?' : 'Remove this conversation?', message: chat.type === 'group' ? 'You will leave this group and stop receiving its messages.' : 'This removes the conversation from your list. It comes back if a new message arrives.', onConfirm: proceed });
       else proceed();
     }
     
@@ -99,6 +119,43 @@ export default function (props){
     },[confirmDelete])
    return( 
       <div className="w-full  rounded-t-xl ">
+      {props.selectionMode ? (
+      <div className="message-titlebar titlebar-swap w-full p-2 pl-4 justify-between items-center h-14 flex">
+        <div className="flex items-center gap-3">
+          <IconButton icon={close} alt="Cancel selection" onClick={props.onCancelSelection} />
+          <div className="text-sm font-semibold text-[var(--text)]" aria-live="polite">{props.selectedCount} selected</div>
+        </div>
+        <div className="flex items-center gap-1">
+          <IconButton icon={forwardIcon} alt="Forward selected" onClick={props.onForwardSelected} />
+          {props.canCopySelected && <IconButton icon={copyIcon} alt="Copy selected" onClick={props.onCopySelected} />}
+          {props.canDeleteSelected && <IconButton icon={del} alt="Delete selected" onClick={props.onDeleteSelected} />}
+        </div>
+      </div>
+      ) : props.chatSearchOpen ? (
+      <div className="message-titlebar titlebar-swap w-full p-2 pl-4 justify-between items-center h-14 flex gap-2">
+        <img src={searchIcon} className="w-4 h-4 opacity-50 dark:invert shrink-0" alt="" />
+        <input
+          autoFocus
+          aria-label="Search in this chat"
+          value={props.chatSearchQuery}
+          onChange={(e) => props.onChatSearchChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); props.onChatSearchNext(); }
+            if (e.key === 'Escape') props.onToggleChatSearch();
+          }}
+          placeholder="Search in this chat"
+          className="flex-1 min-w-0 outline-none bg-transparent text-sm text-[var(--text)] placeholder-gray-400"
+        />
+        {props.chatSearchQuery && (
+          <span className="text-xs text-gray-400 shrink-0 tabular-nums">
+            {props.chatSearchResults.length > 0 ? `${props.chatSearchIndex + 1}/${props.chatSearchResults.length}` : '0/0'}
+          </span>
+        )}
+        <IconButton icon={up} alt="Previous match" size="sm" disabled={props.chatSearchIndex <= 0} onClick={props.onChatSearchPrev} />
+        <IconButton icon={down} alt="Next match" size="sm" disabled={props.chatSearchIndex >= props.chatSearchResults.length - 1} onClick={props.onChatSearchNext} />
+        <IconButton icon={close} alt="Close search" onClick={props.onToggleChatSearch} />
+      </div>
+      ) : (
       <div className="message-titlebar w-full p-2 pl-4 justify-between items-center h-14 flex">
           
         <div className="flex items-center">
@@ -115,15 +172,18 @@ export default function (props){
            <Avatar src={chat.img && chat.img.src} kind={chat.type=='group'?'group':'user'} size="sm" />
          </button>
         <div className="p-2 pt-1 flex flex-col min-w-0">
-        <div className="text-sm w-36 truncate font-semibold text-[var(--text)]">{chat.name||"Unnamed"}</div>
-         <div className={`text-xs ${typingStatus ? 'text-[var(--accent-dark)] italic' : 'text-gray-400'}`}>{status}
+        <div className="text-sm max-w-52 truncate font-semibold text-[var(--text)]">{chat.name||"Unnamed"}</div>
+         <div className={`text-xs flex items-center gap-1.5 ${typingStatus ? 'text-[var(--accent-dark)]' : 'text-gray-400'}`}>
+           {typingStatus && <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>}
+           <span className="truncate">{status}</span>
+           {!typingStatus && chat.disappearingDuration > 0 && <span className="disappearing-pill" title="Disappearing messages are on">⏱ {disappearingLabel}</span>}
          </div>
         </div>
         </div>
         <div className="flex items-center">
-        {showJoin&&<Button variant="primary" className="mr-2 w-24" onClick={()=>{socket.current.emit("join",[chatID.id])}}>Join</Button>}
-        {chatID.id && membershipKnown && chat.users.includes(userID.current) && (
+        {chatID.id && isMember && (
           <>
+            <IconButton icon={searchIcon} alt="Search in chat" className="mr-1" onClick={props.onToggleChatSearch} />
             <button
               type="button"
               title="Start audio call"
@@ -156,6 +216,7 @@ export default function (props){
 
         </div>
     </div>
+    )}
    
     {showOptions && createPortal(<div
          className="message-options-menu p-1 w-48 mt-2 h-fit z-20 rounded-2xl justify-start flex-col text-sm">
@@ -163,6 +224,10 @@ export default function (props){
               <img src={bell}  className="w-4 h-4 dark:invert dark:opacity-80"></img><div>{isMuted ? "Unmute" : "Mute"}</div></button>
               <button onClick={(e)=>{e.stopPropagation();setShowOptions(false);setShowWallpaper(true);}}  className="message-option rounded-xl px-2 py-2 flex items-center gap-2 w-full">
               <span className="w-4 h-4 flex items-center justify-center">🖼</span><div>Wallpaper</div></button>
+              {canSetDisappearing && (
+              <button onClick={(e)=>{e.stopPropagation();setShowOptions(false);setShowDisappearing(true);}} className="message-option rounded-xl px-2 py-2 flex items-center gap-2 w-full">
+              <span className="w-4 h-4 flex items-center justify-center">⏱</span><div>Disappearing messages</div></button>
+              )}
               <button onClick={reportChat}  className="message-option rounded-xl px-2 py-2 flex items-center gap-2 w-full">
               <img src={report}  className="w-4 h-4 dark:invert dark:opacity-80"></img><div>Report</div></button>
               <button onClick={leaveChat} className="message-option rounded-xl px-2 py-2 flex items-center gap-2 w-full">
@@ -186,6 +251,25 @@ export default function (props){
             className={`h-12 rounded-md border-2 ${ (props.wallpaper||null)===w.css ? 'border-[var(--accent)]' : 'border-transparent'}`}
             style={{ background: w.css || undefined }}
           />
+        ))}
+      </div>, document.body
+    )}
+    {showDisappearing && createPortal(
+      <div
+        onMouseLeave={()=>setShowDisappearing(false)}
+        className="wallpaper-menu p-1 w-48 h-fit z-20 rounded-2xl fixed right-12 top-16 text-sm"
+      >
+        {DISAPPEARING_OPTIONS.map((o) => (
+          <button
+            key={o.value}
+            onClick={() => setDisappearing(o.value)}
+            className={`message-option rounded-xl px-3 py-2 flex items-center justify-between w-full ${
+              (chat.disappearingDuration || 0) === o.value ? 'text-[var(--accent-dark)] font-semibold' : ''
+            }`}
+          >
+            {o.label}
+            {(chat.disappearingDuration || 0) === o.value && <span aria-hidden="true">✓</span>}
+          </button>
         ))}
       </div>, document.body
     )}

@@ -1,21 +1,31 @@
 const express = require('express');
 const { AccessToken } = require('livekit-server-sdk');
-const { verifyToken } = require('../../utils/socketAuthTokens');
+const { verifyTokenPayload } = require('../../utils/socketAuthTokens');
 const models = require('../../models/exports');
 const { Types } = require('mongoose');
 
 const callsRouter = express.Router();
 
-function getUserId(req) {
+async function getUserId(req) {
   const sessionUser = req.user && req.user._id;
   if (sessionUser) return String(sessionUser);
   const authorization = req.get('authorization') || '';
   if (!authorization.startsWith('Bearer ')) return null;
-  return verifyToken(authorization.slice(7));
+  const payload = verifyTokenPayload(authorization.slice(7));
+  if (!payload) return null;
+  const user = await models.UsersModel.findById(payload.uid, 'tokensValidAfter');
+  if (!user || (user.tokensValidAfter && payload.iat < user.tokensValidAfter.getTime())) return null;
+  return payload.uid;
 }
 
 callsRouter.post('/calls/token', async (req, res) => {
-  const userId = getUserId(req);
+  let userId;
+  try {
+    userId = await getUserId(req);
+  } catch (err) {
+    console.error('Failed to authenticate call token request:', err);
+    return res.status(500).json({ status: false, message: 'Unable to join call' });
+  }
   const cid = typeof req.body?.cid === 'string' ? req.body.cid : '';
   const roomName = typeof req.body?.roomName === 'string' ? req.body.roomName : '';
   if (!userId || !Types.ObjectId.isValid(cid) || roomName !== `lavender-${cid}`) {

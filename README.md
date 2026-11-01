@@ -41,8 +41,7 @@ multi-device reliability, including:
 Lavender already covers the baseline: real-time 1:1 and group chat, attachments,
 profile editing, reactions, typing indicators, call scaffolding, and permissions.
 The current gaps are also visible and honest: no end-to-end encryption, no
-true disappearing messages, no polls/threads/channels, no push notifications for
-closed tabs, and no AI features or voice-note workflow yet. Those omissions are
+polls/threads/channels, and no AI features yet. Those omissions are
 normal for a working MVP-level chat app, but they are exactly the areas a modern
 chat product needs to close before it feels "finished" to users.
 

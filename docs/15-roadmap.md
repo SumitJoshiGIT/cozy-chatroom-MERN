@@ -43,13 +43,13 @@ Cross-referencing that list against [Chapter 1's feature table](./01-overview.md
 | Reactions | ✅ implemented |
 | Polls | ❌ not implemented |
 | Message threading | ⚠️ flat reply-quote only, no true threads |
-| Disappearing messages | ❌ not implemented |
+| Disappearing messages | ✅ per-chat timer, enforced by a Mongo TTL index |
 | Stories / status updates | ❌ not implemented |
 | AI smart replies / summarization | ❌ not implemented |
 | Chat-level lock / PIN | ❌ not implemented |
 | End-to-end encryption | ❌ not implemented (server can read message content) |
 | Communities / broadcast channels | ❌ not implemented (groups only) |
-| Push notifications (tab closed) | ❌ not implemented |
+| Push notifications (tab closed) | ✅ Web Push (needs VAPID keys) |
 | Voice messages | ❌ not implemented |
 | Voice / video calls | 🚧 LiveKit architecture/scaffold documented; 1:1 MVP and group-call hardening remain |
 | Message edit | ✅ implemented |

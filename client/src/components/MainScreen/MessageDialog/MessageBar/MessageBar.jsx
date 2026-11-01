@@ -11,6 +11,11 @@ import fileIcon from "/files.svg";
 import EmojiPicker from "./EmojiPicker";
 import AttachMenu from "./AttachMenu";
 const maxSize = 2*1024*1024;
+// Base64 inflates files by a third and the socket caps one packet at 5MB.
+const maxTotalSize = 3.5*1024*1024;
+// toUTCString() only has one-second resolution, so two quick sends collided
+// on one id and the second silently replaced the first.
+const newPendingId = () => `pending-${crypto.randomUUID()}`;
 // SVG intentionally excluded - see allowedTypes in server/routes/api/socketEvents.js.
 const imageTypes = ['image/jpeg','image/png','image/jpg','image/webp'];
 const videoTypes = ['video/mp4','video/webm','video/ogg','video/quicktime'];
@@ -26,7 +31,7 @@ const docTypes = [
 ];
 const acceptedTypes = [...imageTypes, ...videoTypes, ...audioTypes, ...docTypes];
 const MessageBar = React.memo((props) => {
-  const { setMessages, db, scrollable, userID, chatID, socket, emitTyping, chatdata, blocked, toggleBlock }=useCtx();
+  const { setMessages, db, scrollable, userID, chatID, socket, emitTyping, chatdata, blocked, toggleBlock, drafts, setDraft }=useCtx();
   const toast=useToast();
   const chat = chatdata[chatID.id] || {};
   const blockedOther = chat.type !== 'group' && chat.sender && blocked.has(chat.sender);
@@ -87,6 +92,19 @@ const MessageBar = React.memo((props) => {
 
   const sharingLiveLocation = liveLocationChat === chatID.id;
 
+  // Unsent text belongs to its chat: restore it on open, save it as it's typed.
+  const draftDebounce = useRef(null);
+  useEffect(() => {
+    clearTimeout(draftDebounce.current);
+    setMessage(drafts[chatID.id] || "");
+    setFiles([]);
+  }, [chatID.id]);
+  function changeDraft(text) {
+    const cid = chatID.id;
+    clearTimeout(draftDebounce.current);
+    draftDebounce.current = setTimeout(() => setDraft(cid, text), 300);
+  }
+
   useEffect(() => {
     if (props.edit) setMessage(props.edit[0].content || "");
   }, [props.edit]);
@@ -108,7 +126,7 @@ const MessageBar = React.memo((props) => {
     event.preventDefault();
     if (props.edit) return saveEdit(event);
     if (!message.trim() && files.length === 0) return;
-    const id = new Date().toUTCString();
+    const id = newPendingId();
     const r2 = props.reply ? props.reply[0]._id : null;
     let msg = {
       _id: id,
@@ -136,14 +154,10 @@ const MessageBar = React.memo((props) => {
     
     setMessage("");
     setFiles([]);
+    clearTimeout(draftDebounce.current);
+    setDraft(chatID.id, "");
 
     const eventName = chatID.type === "user" ? "createChatPrivate" : "sendMessage";
-    console.info("[chat] sending message", {
-      event: eventName,
-      cid: chatID.id,
-      replace: msg._id,
-      hasAttachments: msg.attachments.length > 0,
-    });
     socket.current.emit(
       eventName,
       {
@@ -160,7 +174,7 @@ const MessageBar = React.memo((props) => {
   }
 
   function sendVoiceNote(attachment) {
-    const id = new Date().toUTCString();
+    const id = newPendingId();
     const msg = {
       _id: id,
       uid: userID.current,
@@ -261,22 +275,24 @@ const MessageBar = React.memo((props) => {
   
   const replyTo = useMemo(() => {
     if (props.reply) {
-      console.log(props.reply);
       const m = props.reply[0];
       const p = props.reply[1];
 
       return (
         <div
-          style={{ borderLeft: p.color || "red" }}
-          className="flex items-center w-full bg-white dark:bg-gray-800 border-l-2 rounded-t-lg rounded-md  mb-2 opacity-85 p-1"
+          style={{ borderLeftColor: p.color || "var(--accent)" }}
+          className="composer-context flex items-center w-full bg-white dark:bg-gray-800 border-l-2 rounded-t-lg rounded-md  mb-2 p-1"
         >
           <img src={reply} className="w-7 h-7 mr-2"></img>
-          <div className="flex-1 rounded-md pl-2 bg-opacity-20" style={{}}>
+          <div className="flex-1 min-w-0 rounded-md pl-2">
             <div style={{ color: p.color }} className="text-xs font-bold ">
               {p.name}
             </div>
-            <div className="h-auto text-sm ">{m.content}</div>
+            <div className="h-auto text-sm truncate">{m.content}</div>
           </div>
+          <button type="button" aria-label="Cancel reply" onClick={() => props.setReply()} className="p-1">
+            <img src={close} className="w-4 h-4 dark:invert dark:opacity-80" alt="" />
+          </button>
         </div>
       );
     } else return null;
@@ -285,7 +301,7 @@ const MessageBar = React.memo((props) => {
   const editBanner = useMemo(() => {
     if (!props.edit) return null;
     return (
-      <div className="flex items-center w-full bg-white dark:bg-gray-800 border-l-2 border-[var(--accent)] rounded-t-lg rounded-md mb-2 opacity-85 p-1">
+      <div className="composer-context flex items-center w-full bg-white dark:bg-gray-800 border-l-2 border-[var(--accent)] rounded-t-lg rounded-md mb-2 p-1">
         <img src={edit} className="w-5 h-5 mx-2 dark:invert dark:opacity-80"></img>
         <div className="flex-1 rounded-md pl-2 text-xs font-semibold text-gray-600 dark:text-gray-300">
           Editing message
@@ -298,6 +314,7 @@ const MessageBar = React.memo((props) => {
   }, [props.edit]);
   function handleChange(event) {
            const selected = Array.from(filesRef.current.files || []);
+           let total = files.reduce((sum, file) => sum + (file.size || 0), 0);
            selected.forEach((file) => {
               if (!acceptedTypes.includes(file.type)) {
                 toast.error(`${file.name}: unsupported file type`);
@@ -307,6 +324,11 @@ const MessageBar = React.memo((props) => {
                 toast.error(`${file.name}: file too large (max 2MB)`);
                 return;
               }
+              if (total + file.size > maxTotalSize) {
+                toast.error(`${file.name}: too much to send at once. Send the rest separately.`);
+                return;
+              }
+              total += file.size;
               const reader = new FileReader();
               reader.onloadend = () => {
                 const data = reader.result.split(',')[1];
@@ -431,12 +453,14 @@ const MessageBar = React.memo((props) => {
 
               ref.current.style.height = ref.current.scrollHeight + "px";
             }}
+            aria-label="Message"
             className="pt-2 pb-1.5 align-bottom bg-transparent text-sm max-h-36 w-full outline-none border-none min-h-9 h-auto text-gray-700 dark:text-gray-100 resize-none placeholder-gray-400 dark:placeholder-gray-500"
             placeholder="Write your message..."
             type="text"
             onChange={(event) => {
               setMessage(() => event.target.value);
               if (!props.edit) {
+                changeDraft(event.target.value);
                 const now = Date.now();
                 if (now - lastTypingEmit.current > 2000) {
                   lastTypingEmit.current = now;

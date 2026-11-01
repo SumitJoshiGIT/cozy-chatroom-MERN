@@ -64,7 +64,7 @@ what's a good next project if you're extending this codebase:
 | Block / report user | ✅ implemented |
 | Delete group (owner, for everyone) | ✅ implemented |
 | Read receipts beyond a static "sent" tick | 🚧 not yet implemented |
-| Push notifications | 🚧 not yet implemented |
+| Push notifications | ✅ Web Push (needs VAPID keys in the server `.env`) |
 | Audio/video calls | 🚧 strategy and LiveKit integration scaffold documented; production hardening and rollout remain |
 | Feature-flagged demo accounts | 🚧 implemented behind `DEMO_ENABLED`; cleanup and production limits should be monitored |
 

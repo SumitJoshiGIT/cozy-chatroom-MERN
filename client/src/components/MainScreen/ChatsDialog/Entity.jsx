@@ -19,6 +19,7 @@ export default function (props) {
     setMessageDialog,
     userID,
     drafts = {},
+    mutedChats,
   } = useCtx();
   
   const [chatid, setId] = useState(props.id);
@@ -32,8 +33,8 @@ export default function (props) {
       // profiles[] entry - copy it and label the chat distinctly instead of
       // just showing your own name back at you.
       const isSelf = chat.sender === userID.current;
-      const user = isSelf ? { ...profiles[chat.sender] } : profiles[chat.sender];
-      delete user._id;
+      // updatedAt must stay the chat's own: it drives the sync manifest.
+      const { _id, createdAt, updatedAt, ...user } = profiles[chat.sender];
       chat={...chat,...user, ...(isSelf ? { name: "Saved Messages" } : {})}
       if(chatCache.current.chats[chat._id])
         chatCache.current.chats[chat._id]=chat;
@@ -131,6 +132,8 @@ export default function (props) {
     ? (latest.uid == userID.current ? "You" : (profiles[latest.uid] ? profiles[latest.uid].name : ""))
     : "";
   const draft = drafts[chat._id];
+  const unread = active ? 0 : (chat.unreadCount || 0);
+  const muted = mutedChats && chat._id && mutedChats[chat._id];
 
   if (!chat._id) return null;
 
@@ -138,7 +141,7 @@ export default function (props) {
     <div
       onClick={onClick}
       title={props.style ? (chat.name || "Unnamed") : undefined}
-      className={`chat-entity flex items-center cursor-pointer transition-colors ${
+      className={`chat-entity relative flex items-center cursor-pointer transition-colors ${
         props.style
           ? 'chat-entity-collapsed justify-center w-12 h-12 shrink-0 mb-1 rounded-full'
           : 'chat-entity-expanded gap-3 w-full px-2 py-2 mb-0.5 rounded-lg'
@@ -159,12 +162,14 @@ export default function (props) {
               {chat.name || "Unnamed"}
             </div>
             {latest && (
-              <span className="text-xs text-gray-400 shrink-0">
+              <span className={`text-xs shrink-0 ${unread ? "chat-time-unread" : "text-gray-400"}`}>
                 {pad(new Date(latest.createdAt).getHours())}:
                 {pad(new Date(latest.createdAt).getMinutes())}
               </span>
             )}
           </div>
+          <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
           {draft ? (
             <div className="truncate text-sm">
               <span className="text-red-500 dark:text-red-400">Draft: </span>
@@ -175,7 +180,7 @@ export default function (props) {
               {previewName && (
                 <span
                   style={{
-                    color: latest.uid == userID.current ? undefined : (profiles[latest.uid] ? profiles[latest.uid].color : undefined),
+                    color: latest.uid == userID.current || !profiles[latest.uid] || !profiles[latest.uid].color ? undefined : `color-mix(in srgb, ${profiles[latest.uid].color} 55%, var(--text))`,
                   }}
                   className={latest.uid == userID.current ? "text-gray-400" : ""}
                 >
@@ -185,8 +190,13 @@ export default function (props) {
               <span>{previewText}</span>
             </div>
           )}
+          </div>
+          {muted && <span className="chat-muted-mark" title="Muted" aria-label="Muted">🔕</span>}
+          {unread > 0 && <span key={unread} className="chat-unread-badge" aria-label={`${unread} unread`}>{unread > 99 ? "99+" : unread}</span>}
+          </div>
         </div>
       )}
+      {props.style && unread > 0 && <span className="chat-unread-dot" aria-hidden="true" />}
     </div>
   );
 }

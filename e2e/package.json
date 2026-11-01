@@ -1,0 +1,10 @@
+{
+  "name": "lavender-e2e",
+  "private": true,
+  "scripts": {
+    "test": "bash run.sh"
+  },
+  "dependencies": {
+    "playwright": "^1.50.0"
+  }
+}

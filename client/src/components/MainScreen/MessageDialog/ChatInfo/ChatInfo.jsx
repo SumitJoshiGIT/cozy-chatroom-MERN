@@ -43,6 +43,16 @@ export default function (props) {
   const admin =
     (chat.admins || []).includes(userID.current) || isOwner;
   const fileform = useRef({});
+  const [inviteLink, setInviteLink] = useState("");
+  useEffect(() => {
+    setInviteLink("");
+    const onInvite = ({ cid, code }) => {
+      if (cid === chat._id) setInviteLink(`${window.location.origin}/app?invite=${code}`);
+    };
+    const socketRef = socket.current;
+    socketRef.on("inviteCode", onInvite);
+    return () => socketRef.off("inviteCode", onInvite);
+  }, [chat._id]);
   const ActiveTab=Tabs[active];
 
   return (
@@ -133,6 +143,22 @@ export default function (props) {
             </Button>
           )}
         </div>
+        {admin && chat.type === "group" && (
+          <div className="invite-panel flex flex-col gap-2 max-w-md mt-1">
+            {inviteLink ? (
+              <>
+                <input readOnly aria-label="Invite link" value={inviteLink} onFocus={(event) => event.target.select()} className="invite-link" />
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="primary" onClick={() => navigator.clipboard.writeText(inviteLink).then(() => toast.success("Invite link copied."), () => toast.error("Couldn't copy the link"))}>Copy link</Button>
+                  <Button variant="ghost" onClick={() => socket.current.emit("resetInviteCode", { cid: chat._id })}>Reset link</Button>
+                </div>
+                <p className="text-xs text-[var(--text-muted)]">Anyone with this link can join. Resetting it stops the old link working.</p>
+              </>
+            ) : (
+              <Button variant="ghost" className="self-start" onClick={() => socket.current.emit("getInviteCode", { cid: chat._id })}>Get invite link</Button>
+            )}
+          </div>
+        )}
         {reporting && (
           <div className="flex flex-col gap-2 max-w-md mt-1">
             <TextArea

@@ -1,5 +1,12 @@
 # 6. File & Image Uploads
 
+> **Message attachments are private.** Avatars and group photos stay public in
+> `server/public/`, but attachments go to `server/public/.attachments/` and are
+> served only by `GET /media/:name`, which needs a short-lived signed token and
+> checks the requester is currently a member of the file's chat. Where the text
+> below says attachments are served statically, that applies to avatars and
+> group photos only.
+
 There are three things in Lavender that involve a file: a user's avatar, a group's
 photo, and a message's attachments. All three go through the **same mechanism**,
 which is worth understanding on its own because it's an unusual choice compared to

@@ -2,18 +2,17 @@ import React,{useRef,useMemo,useEffect, useCallback, useState} from "react";
 import { useNavigate } from "react-router-dom";
 import { useCtx } from "../../AppScreen";
 import ImageInput from "../../ImageInput";
-import { post } from "../../../Axios";
 import Card from "../../../ui/Card";
 import IconButton from "../../../ui/IconButton";
 import Button from "../../../ui/Button";
 import { TextField, TextArea } from "../../../ui/TextField";
 import { useToast } from "../../../ui/Toast";
 import { downloadFile } from "../../../../download";
-import { clearStoredAuthToken } from "../../../../socketAuthToken";
+import { logout } from "../../../../session";
 import single from '/single.svg'
 import close from '/close.svg'
 export default function (props){
-    const {profiles,contacts,setContacts,setMessageDialog,socket,userID,setChatID,privateChats,blocked,toggleBlock,report}=useCtx();
+    const {profiles,contacts,setContacts,setMessageDialog,socket,db,userID,setChatID,privateChats,blocked,toggleBlock,report}=useCtx();
     const toast=useToast();
     const navigate=useNavigate();
     const fileform=useRef({});
@@ -98,12 +97,7 @@ export default function (props){
       ) : null}
 
       {admin && (
-        <Button variant="danger" className="mt-4 self-start" onClick={async () => {
-            await post('/auth/logout');
-            clearStoredAuthToken();
-            socket.current.disconnect();
-            navigate('/auth/signin');
-          }}>
+        <Button variant="danger" className="mt-4 self-start" onClick={() => logout({ socket, db, navigate })}>
           Log out
         </Button>
       )}

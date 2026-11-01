@@ -75,6 +75,11 @@ const Users=new mongoose.Schema
    demoExpiresAt:{
       type:Date,
       default:null
+   },
+   // Bearer tokens issued before this moment are rejected (set on logout).
+   tokensValidAfter:{
+      type:Date,
+      default:null
    }
       },
    {timestamps:true}
@@ -101,6 +106,7 @@ Users.pre('save',function(next){
 
 Users.index({name:'text',email:'text',username:'text'})
 Users.index({ demoExpiresAt: 1 });
+Users.index({ email: 1 }, { unique: true });
 Users.plugin(AutoIncrement, { inc_field: 'user_id', start_seq: 0 });
 
 

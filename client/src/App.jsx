@@ -1,13 +1,21 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { createBrowserRouter,RouterProvider } from 'react-router-dom';
-import ChatScreen from './components/MainScreen/AppScreen';
 import AuthScreen from './components/AuthScreen/AuthScreen';
 import SignUp from './components/AuthScreen/SignUp/SignUp';
 import SignIn from './components/AuthScreen/SignIn/SignIn';
 import Verify from './components/AuthScreen/Verify/Verify';
 import Hero from './components/Hero/Hero';
-import Features from './components/Hero/Features';
 import { ToastProvider } from './components/ui/Toast';
+import Spinner from './components/ui/Spinner';
+
+const ChatScreen = lazy(() => import('./components/MainScreen/AppScreen'));
+const Features = lazy(() => import('./components/Hero/Features'));
+
+const RouteFallback = () => (
+  <div className="flex h-screen w-screen items-center justify-center">
+    <Spinner size="lg" />
+  </div>
+);
 
 class AppErrorBoundary extends React.Component {
   state = { hasError: false };
@@ -59,7 +67,7 @@ const router=createBrowserRouter([
     },
     {
       path:"/app",
-      element:<ChatScreen/>
+      element:<Suspense fallback={<RouteFallback/>}><ChatScreen/></Suspense>
     },
     {
       path:"/",
@@ -67,7 +75,7 @@ const router=createBrowserRouter([
     },
     {
       path:"/features",
-      element:<Features/>
+      element:<Suspense fallback={<RouteFallback/>}><Features/></Suspense>
     },
 
   ]

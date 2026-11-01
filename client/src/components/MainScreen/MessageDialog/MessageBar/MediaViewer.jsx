@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import close from "/close.svg";
 import download from "/down.svg";
 import { downloadFile } from "../../../../download";
@@ -19,10 +20,12 @@ export default function MediaViewer({ item, onClose }) {
 
   if (!item) return null;
 
-  return (
+  // Portaled: bubbles are transformed, which would otherwise make this
+  // "fixed" overlay relative to the bubble instead of the viewport.
+  return createPortal(
     <div
       onClick={onClose}
-      className="fixed inset-0 bg-black/85 z-40 flex items-center justify-center animate-fade-in"
+      className="media-viewer fixed inset-0 bg-black/85 z-50 flex items-center justify-center animate-fade-in"
     >
       <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
         <button
@@ -55,6 +58,7 @@ export default function MediaViewer({ item, onClose }) {
         )}
         <div className="mt-2 text-white/70 text-xs truncate max-w-full">{item.name}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

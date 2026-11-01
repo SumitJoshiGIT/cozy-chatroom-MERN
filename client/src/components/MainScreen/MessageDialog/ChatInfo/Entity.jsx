@@ -30,18 +30,18 @@ export default function (props){
          <div className="w-full rounded-md pl-4">
            <div className="justify-between ">
              <div className="truncate max-w-36  overflow-hidden text-ellipses  text-lg font-semibold">{contact.name||"Unnamed"}</div>
-             <div  className="text-xs">{admin?'admin':(owner?'owner':'member')}</div>
+             <div  className="text-xs">{owner?'owner':(admin?'admin':'member')}</div>
            </div>
            <div className="text-gray-400 text-base">
            </div>
          </div>
          {(props.admin)&&
          <div className="flex items-center">
-          { ((props.admin&&!admin)||(props.owner&&!owner))&&<IconButton icon={remo} alt="Remove" onClick={remove} />
+          { !owner&&(props.owner||!admin)&&<IconButton icon={remo} alt="Remove" onClick={remove} />
           }
-            {(props.owner)&&<IconButton icon={promo} alt="Promote" onClick={promote} />
+            {(props.owner&&!admin)&&<IconButton icon={promo} alt="Promote" onClick={promote} />
             }
-            {(props.owner)&&<IconButton icon={demo} alt="Demote" onClick={demote} />
+            {(props.owner&&admin&&!owner)&&<IconButton icon={demo} alt="Demote" onClick={demote} />
             }
          </div>
          }

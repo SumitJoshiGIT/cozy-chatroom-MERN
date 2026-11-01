@@ -1,7 +1,10 @@
 const express=require("express");
 const {passport, resendOTP}=require("./passportSetup");
-const {issueToken}=require("../../utils/socketAuthTokens");
+const {issueToken,verifyTokenPayload}=require("../../utils/socketAuthTokens");
+const rateLimit=require("express-rate-limit").rateLimit;
 const Users = require("../../models/Users");
+const PushSubscriptions = require("../../models/PushSubscriptions");
+const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const authRouter=express.Router();
@@ -10,14 +13,26 @@ const clientOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').spl
 const demoEnabled = process.env.DEMO_ENABLED === 'true';
 const demoTtlMs = Math.max(1, Number(process.env.DEMO_TTL_HOURS || 24)) * 60 * 60 * 1000;
 
-authRouter.post('/auth/demo', async (req, res) => {
+const limiter=(windowMs,limit,message)=>rateLimit({
+    windowMs,
+    limit,
+    standardHeaders:'draft-7',
+    legacyHeaders:false,
+    message:{status:false,message},
+});
+const attemptLimit=Number(process.env.AUTH_RATE_LIMIT||30);
+const signinLimiter=limiter(15*60*1000,attemptLimit,'Too many sign-in attempts. Try again later.');
+const otpLimiter=limiter(15*60*1000,attemptLimit,'Too many attempts. Try again later.');
+const signupLimiter=limiter(60*60*1000,attemptLimit,'Too many sign-up attempts. Try again later.');
+const demoLimiter=limiter(60*60*1000,attemptLimit,'Too many demo sessions. Try again later.');
+
+authRouter.post('/auth/demo', demoLimiter, async (req, res) => {
     if (!demoEnabled) return res.status(404).json({ status: false, message: 'Demo access is unavailable' });
     try {
         const demoToken = typeof req.body?.demoToken === 'string' ? req.body.demoToken : '';
         let userId = null;
         if (demoToken) {
-            const { verifyToken } = require("../../utils/socketAuthTokens");
-            userId = verifyToken(demoToken);
+            userId = verifyTokenPayload(demoToken)?.uid;
             if (userId) {
                 const existing = await Users.findOne({ _id: userId, isDemo: true, demoExpiresAt: { $gt: new Date() } });
                 if (existing) {
@@ -41,7 +56,7 @@ authRouter.post('/auth/demo', async (req, res) => {
     }
 });
 
-authRouter.post('/auth/signup',(req,res,next)=>{
+authRouter.post('/auth/signup',signupLimiter,(req,res,next)=>{
     passport.authenticate('local-signup',(err,user,info)=>{
         if(err) return res.status(500).json({status:false,message:'Internal server error'});
         return res.json(info);
@@ -49,7 +64,7 @@ authRouter.post('/auth/signup',(req,res,next)=>{
 });
 
 
-authRouter.post('/auth/signin',(req,res,next)=>{
+authRouter.post('/auth/signin',signinLimiter,(req,res,next)=>{
     passport.authenticate('local-signin',(err,user,info)=>{
         if(err) return res.status(500).json({status:false,message:'Internal server error'});
         if(!user) return res.status(401).json(info);
@@ -60,7 +75,7 @@ authRouter.post('/auth/signin',(req,res,next)=>{
     })(req,res,next);
 });
 
-authRouter.post('/auth/verify',(req,res,next)=>{
+authRouter.post('/auth/verify',otpLimiter,(req,res,next)=>{
     passport.authenticate('local-otp',(err,user,info)=>{
         if(err) return res.status(500).json({status:false,message:'Internal server error'});
         if(!user) return res.status(401).json(info);
@@ -71,7 +86,7 @@ authRouter.post('/auth/verify',(req,res,next)=>{
     })(req,res,next);
 });
 
-authRouter.post('/auth/resendOTP',resendOTP);
+authRouter.post('/auth/resendOTP',otpLimiter,resendOTP);
 
 function originFromReferer(req) {
     try {
@@ -102,10 +117,43 @@ authRouter.get('/auth/google/oauth/callback',
   }
 )
 
-authRouter.post('/auth/logout',(req,res)=>{
+// A plain logout ends this session and every bearer token (tokens can only be
+// revoked together), so their open sockets close too; other cookie sessions
+// stay signed in. `everywhere` also ends those.
+async function endSockets(req,userId,everywhere){
+    const sockets=await req.app.get('io').in(`user:${userId}`).fetchSockets();
+    for(const socket of sockets){
+        if(everywhere||socket.data.viaToken||socket.data.sessionId===req.sessionID){
+            socket.emit('loggedOut');
+            socket.disconnect(true);
+        }
+    }
+}
+
+authRouter.post('/auth/logout',async (req,res)=>{
+    const authorization=req.get('authorization')||'';
+    const bearer=authorization.startsWith('Bearer ')?verifyTokenPayload(authorization.slice(7)):null;
+    const userId=(req.user&&req.user._id)||(bearer&&bearer.uid);
+    const everywhere=req.body?.everywhere===true;
+    try{
+        if(userId){
+            await Users.findByIdAndUpdate(userId,{tokensValidAfter:new Date()});
+            await endSockets(req,String(userId),everywhere);
+            if(everywhere){
+                // connect-mongo stores each session as a JSON string.
+                await mongoose.connection.collection('sessions').deleteMany({session:{$regex:`"_id":"${userId}"`}});
+                await PushSubscriptions.deleteMany({user:userId});
+            }
+        }
+    }catch(err){
+        console.error('Failed to end sessions on logout:',err);
+    }
     req.logout((err)=>{
         if(err) return res.status(500).json({status:false,message:'Internal server error'});
-        res.json({status:true});
+        req.session.destroy(()=>{
+            res.clearCookie('connect.sid');
+            res.json({status:true});
+        });
     });
 });
 

@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCtx } from "../../AppScreen";
-import { post } from "../../../Axios";
 import Card from "../../../ui/Card";
 import IconButton from "../../../ui/IconButton";
 import Button from "../../../ui/Button";
 import Avatar from "../../../ui/Avatar";
 import Switch from "../../../ui/Switch";
 import { THEMES, applyTheme, getStoredThemeId, applyDarkMode, getStoredDarkMode } from "../../../../theme";
-import { clearStoredAuthToken } from "../../../../socketAuthToken";
+import { logout } from "../../../../session";
 import { isPushSupported, getStoredPushPreference, subscribeToPush, unsubscribeFromPush } from "../../../../pushNotifications";
 import close from "/close.svg";
 
@@ -22,7 +21,7 @@ function Section({ title, children }) {
 }
 
 export default function Settings(props) {
-  const { profiles, userID, socket, setMessageDialog } = useCtx();
+  const { profiles, userID, socket, db, setMessageDialog } = useCtx();
   const profile = profiles[userID.current] || {};
   const navigate = useNavigate();
   const [themeId, setThemeId] = useState(getStoredThemeId());
@@ -69,12 +68,7 @@ export default function Settings(props) {
     document.documentElement.classList.toggle('reduce-motion', val);
   };
 
-  const logout = async () => {
-    await post('/auth/logout');
-    clearStoredAuthToken();
-    socket.current.disconnect();
-    navigate('/auth/signin');
-  };
+  const signOut = () => logout({ socket, db, navigate });
 
   return (
     <Card className="max-w-md w-full h-full flex flex-col overflow-hidden animate-fade-in-up">
@@ -145,8 +139,11 @@ export default function Settings(props) {
           </div>
         </Section>
 
-        <Button variant="danger" className="w-full py-2" onClick={logout}>
+        <Button variant="danger" className="w-full py-2" onClick={signOut}>
           Log out
+        </Button>
+        <Button variant="ghost" className="w-full py-2 mt-2" onClick={() => logout({ socket, db, navigate, everywhere: true })}>
+          Log out of all devices
         </Button>
       </div>
     </Card>

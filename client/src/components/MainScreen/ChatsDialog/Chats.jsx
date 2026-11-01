@@ -5,7 +5,10 @@ import Spinner from "../../ui/Spinner";
 import { useCtx } from "../AppScreen";
 export default function (props){
     const {chatdata, chatsLoaded}=useCtx()
-    const chats=useMemo(()=>{return Object.keys((chatdata||{})).map((key)=><Entity cache={props.cache} style={props.style} setStyle={props.setStyle} key={key} id={key}/>)},[chatdata,props.style])
+    const chats=useMemo(()=>{
+      const lastActivity=(chat)=>new Date((chat&&chat.lastMessage&&chat.lastMessage.createdAt)||(chat&&chat.createdAt)||0).getTime();
+      const ordered=Object.keys(chatdata||{}).sort((a,b)=>lastActivity(chatdata[b])-lastActivity(chatdata[a]));
+      return ordered.map((key)=><Entity cache={props.cache} style={props.style} setStyle={props.setStyle} key={key} id={key}/>)},[chatdata,props.style])
     const showLoading = !chatsLoaded && chats.length === 0;
     return(
       <div className="flex flex-col w-full flex-1 min-h-0 mt-2">

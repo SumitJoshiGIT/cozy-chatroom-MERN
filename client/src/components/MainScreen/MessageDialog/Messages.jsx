@@ -4,6 +4,7 @@ import ForwardDialog from "./ForwardDialog";
 import React, {
   useRef,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useState,
   useMemo,
@@ -15,7 +16,13 @@ import pinIcon from "/pin.svg";
 import { getWallpaper, setWallpaperFor } from "../../../wallpaper";
 import Spinner from "../../ui/Spinner";
 export default function MessageDialog(props) {
-  const { Messages, setMessages, chatID, scrollable, socket, chatdata, userID, profiles, db, unpinMessage, loadedChats } = useCtx();
+  const { Messages, setMessages, chatID, scrollable, socket, chatdata, userID, profiles, db, unpinMessage, loadedChats, hasMoreHistory } = useCtx();
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [showJump, setShowJump] = useState(false);
+  const nearBottom = useRef(true);
+  const olderAnchor = useRef(null);
+  const openedChat = useRef(null);
+  const lastSeenKey = useRef(null);
   const [pinIndex, setPinIndex] = useState(0);
   const [reply, setReply] = useState();
   const [edit, setEdit] = useState();
@@ -62,12 +69,22 @@ export default function MessageDialog(props) {
     return () => socket.current.off("searchMessagesInChat", handler);
   }, [chatID.id]);
 
+  // scrollIntoView also pans every ancestor, even overflow:hidden ones, which
+  // slid the whole app shell sideways. Only the list itself should move.
+  const centerInList = useCallback((el) => {
+    const list = scrollable.current;
+    if (!list) return;
+    const listBox = list.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    list.scrollTop += box.top - listBox.top - (list.clientHeight - box.height) / 2;
+  }, []);
+
   const jumpToMatch = useCallback((match) => {
     if (!match) return;
     const el = document.getElementById(match._id);
     clearTimeout(highlightTimerRef.current);
     if (el) {
-      el.scrollIntoView({ block: "center" });
+      centerInList(el);
       setHighlightedMessageId(match._id);
       highlightTimerRef.current = setTimeout(() => setHighlightedMessageId(null), 1500);
       pendingJumpRef.current = null;
@@ -127,18 +144,48 @@ export default function MessageDialog(props) {
     setChatSearchIndex(0);
     setHighlightedMessageId(null);
     pendingPinFetch.current.clear();
+    setLoadingOlder(false);
+    setShowJump(false);
+    nearBottom.current = true;
+    olderAnchor.current = null;
+    openedChat.current = null;
   }, [chatID.id]);
 
-  const onScroll = useCallback(
-    function () {
-      if (scrollable.current && scrollable.current.scrollTop < 20) {
-        // socket.current.emit('messages',{cid:chatID.id,mid:Messages[chatID.id][0]?Messages[0]._id:null})
-      }
-    },
-    [Messages]
-  );
-
   const m = Messages[chatID.id];
+
+  const loadOlder = useCallback(() => {
+    if (loadingOlder || !chatID.id || chatID.type === "user") return;
+    if (hasMoreHistory.current[chatID.id] === false) return;
+    const mids = Object.values(m || {}).map((message) => message.mid).filter((mid) => typeof mid === "number");
+    if (!mids.length) return;
+    olderAnchor.current = scrollable.current.scrollHeight;
+    setLoadingOlder(true);
+    socket.current.emit("messages", { cid: chatID.id, mode: "before", cursorMid: Math.min(...mids) });
+  }, [loadingOlder, chatID.id, chatID.type, m]);
+
+  useEffect(() => {
+    const handler = (stream) => {
+      if (stream.id !== chatID.id || stream.mode !== "before") return;
+      setLoadingOlder(false);
+      if (!stream.data || !stream.data.length) olderAnchor.current = null;
+    };
+    socket.current.on("messages", handler);
+    return () => socket.current.off("messages", handler);
+  }, [chatID.id]);
+
+  const onScroll = useCallback(() => {
+    const el = scrollable.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    nearBottom.current = atBottom;
+    setShowJump(!atBottom);
+    if (el.scrollTop < 60) loadOlder();
+  }, [loadOlder]);
+
+  const jumpToLatest = useCallback(() => {
+    const el = scrollable.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, []);
   useEffect(() => {
     if (chatID.id) socket.current.emit("markSeen", { cid: chatID.id });
   }, [chatID.id, m]);
@@ -176,7 +223,7 @@ export default function MessageDialog(props) {
     if (!match) return;
     const el = document.getElementById(match._id);
     if (el) {
-      el.scrollIntoView({ block: "center" });
+      centerInList(el);
       setHighlightedMessageId(match._id);
       clearTimeout(highlightTimerRef.current);
       highlightTimerRef.current = setTimeout(() => setHighlightedMessageId(null), 1500);
@@ -201,6 +248,32 @@ export default function MessageDialog(props) {
   }, [chatID.id]);
 
   const messagesLoading = !!chatID.id && chatID.type !== "user" && !loadedChats.has(chatID.id);
+
+  useLayoutEffect(() => {
+    const el = scrollable.current;
+    if (!el || messagesLoading) return;
+    const values = Object.values(m || {});
+    const last = values[values.length - 1];
+    const lastKey = last ? (last.clientId || last._id) : null;
+    const lastChanged = lastKey !== lastSeenKey.current;
+    lastSeenKey.current = lastKey;
+    if (openedChat.current !== chatID.id) {
+      if (values.length) {
+        el.scrollTop = el.scrollHeight;
+        openedChat.current = chatID.id;
+      }
+      return;
+    }
+    if (olderAnchor.current != null && !lastChanged) {
+      // Prepending must not move what the reader is looking at.
+      el.scrollTop = el.scrollHeight - olderAnchor.current + el.scrollTop;
+      olderAnchor.current = null;
+      return;
+    }
+    if (lastChanged && (nearBottom.current || (last && last.uid == userID.current))) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
+  }, [m, chatID.id, messagesLoading]);
   const chat = chatdata[chatID.id] || {};
   const canPin = chat.type !== 'group' || (chat.admins||[]).includes(userID.current) || chat.owner===userID.current;
 
@@ -384,6 +457,7 @@ export default function MessageDialog(props) {
           onDeleteSelected={deleteSelected}
           onCopySelected={copySelected}
           canCopySelected={selectedMessages.length === 1 && !!selectedMessages[0].content}
+          canDeleteSelected={selectedMessages.length > 0 && selectedMessages.every((message) => message.uid == userID.current || (chat.type === 'group' && ((chat.admins||[]).includes(userID.current) || chat.owner === userID.current)))}
           chatSearchOpen={chatSearchOpen}
           onToggleChatSearch={toggleChatSearch}
           chatSearchQuery={chatSearchQuery}
@@ -395,7 +469,7 @@ export default function MessageDialog(props) {
         />
       )}
       {chatID.id && activePinned && (
-        <div className="w-full px-3 py-1.5 bg-white/90 dark:bg-gray-800/90 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2 text-xs">
+        <div className="message-pin-bar w-full px-3 py-1.5 bg-white/90 dark:bg-gray-800/90 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2 text-xs">
           <img src={pinIcon} alt="" className="w-3.5 h-3.5 opacity-60 dark:invert shrink-0" />
           {pinnedIds.length > 1 && (
             <button
@@ -440,12 +514,27 @@ export default function MessageDialog(props) {
           <Spinner size="lg" />
         </div>
       ) : (
-        <div
-          ref={scrollable}
-          onScroll={onScroll}
-          className="mt-4  pb-4 pr-5 pl-5 flex flex-col w-full overflow-y-scroll overflow-visible  flex-1 bg-cover bg-repeat"
-        >
-          {rows}
+        <div className="message-viewport relative w-full flex-1 min-h-0 flex flex-col">
+          <div
+            ref={scrollable}
+            onScroll={onScroll}
+            className="message-list mt-4 pb-4 pr-5 pl-5 flex flex-col w-full overflow-y-scroll flex-1 bg-cover bg-repeat"
+          >
+            {loadingOlder && <div className="flex justify-center py-2 shrink-0"><Spinner size="sm" /></div>}
+            {rows.length === 0 && (
+              <div className="message-empty m-auto text-center animate-fade-in">
+                <div className="message-empty-mark" aria-hidden="true">✿</div>
+                <p className="text-sm font-semibold text-[var(--text)]">No messages yet</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">Say hello to start the conversation.</p>
+              </div>
+            )}
+            {rows}
+          </div>
+          {showJump && (
+            <button type="button" onClick={jumpToLatest} aria-label="Jump to latest message" className="message-jump">
+              <img src="/down.svg" alt="" className="w-4 h-4 dark:invert" />
+            </button>
+          )}
         </div>
       )}
       {chatID.id && (

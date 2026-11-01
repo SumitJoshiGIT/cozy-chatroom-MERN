@@ -12,6 +12,8 @@ node_modules
 dist-ssr
 *.local
 server/local-demo-users.txt
+server/public/*
+!server/public/.gitkeep
 .vercel
 .vscode/*
 !.vscode/extensions.json

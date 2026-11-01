@@ -1,7 +1,8 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
+import { createPortal } from "react-dom";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useCtx } from "../../AppScreen";
-import { apiOrigin } from "../../../../apiOrigin";
+import { attachmentUrl } from "../../../../attachmentUrl";
 import Avatar from "../../../ui/Avatar";
 import forward from "/forward.svg";
 import reportIcon from "/report.svg";
@@ -14,8 +15,13 @@ import { useToast } from "../../../ui/Toast";
 import Spinner from "../../../ui/Spinner";
 import VoiceNote from "./VoiceNote";
 import DocumentPreview from "./DocumentPreview";
-import LocationMessage from "./LocationMessage";
+import MediaViewer from "./MediaViewer";
 import ConfirmDialog, { shouldConfirm } from "../../../ui/ConfirmDialog";
+// Leaflet is heavy and only needed once a location message is on screen.
+const LocationMessage = lazy(() => import("./LocationMessage"));
+// Profile colours are random, so pull them toward the text colour to stay
+// legible on both themes.
+const readableColor = (color) => (color ? `color-mix(in srgb, ${color} 55%, var(--text))` : undefined);
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
 const formatSize = (bytes) => {
@@ -43,10 +49,11 @@ const fileBadge = (contentType, name) =>
   };
 
 export default function (props) {
-  const { profiles, db, userID, Messages, chatID, socket, starred, toggleStar, chatdata, pinMessage, unpinMessage, reactMessage, report } = useCtx();
+  const { profiles, db, userID, chatID, socket, starred, toggleStar, chatdata, pinMessage, unpinMessage, reactMessage, report, requestProfile, mediaToken } = useCtx();
+  const [viewer, setViewer] = useState(null);
   const contextref = useRef();
   const [showReactions, setShowReactions] = useState(false);
-  const [contextOpen, setContextOpen] = useState(false);
+  const [contextOpen, setContextOpen] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmation, setConfirmation] = useState(null);
   const toast = useToast();
@@ -73,12 +80,6 @@ export default function (props) {
 
   useEffect(() => {
     if (messageItem.status == "⧖" && !messageItem.sendQueued) {
-      console.log(
-        "pending",
-        chatID.type == "user" ? "createChatPrivate" : "sendMessage",
-        chatID.type == "user" ? "createChatPrivate" : "sendMessage",
-        messageItem
-      );
       socket.current.emit(
         chatID.type == "user" ? "createChatPrivate" : "sendMessage",
         {
@@ -92,25 +93,27 @@ export default function (props) {
     }
   }, []);
   useEffect(() => {
-    //        messageCache
-  }, []);
+    if (!profiles[messageItem.uid]) requestProfile(messageItem.uid);
+  }, [profiles[messageItem.uid]]);
 
   useEffect(() => {
-    if (!profiles[messageItem.uid]) {
-      socket.current.emit("getProfile", { uid: messageItem.uid });
-    }
-  }, [profiles[messageItem.uid]]);
+    if (!deleting) return;
+    const reset = ({ event }) => { if (event === "deleteMessage") setDeleting(false); };
+    const socketRef = socket.current;
+    socketRef.on("messageError", reset);
+    return () => socketRef.off("messageError", reset);
+  }, [deleting]);
 
   useEffect(() => {
     const closeOtherMenus = (event) => {
       if (event.detail !== messageItem._id) {
-        setContextOpen(false);
+        setContextOpen(null);
         setShowReactions(false);
       }
     };
     const closeOnOutsideClick = (event) => {
       if (contextref.current && !contextref.current.contains(event.target)) {
-        setContextOpen(false);
+        setContextOpen(null);
       }
     };
     window.addEventListener("lavender:close-message-menus", closeOtherMenus);
@@ -121,12 +124,19 @@ export default function (props) {
     };
   }, [messageItem._id]);
 
-  const closeMenu = () => setContextOpen(false);
+  const closeMenu = () => setContextOpen(null);
 
   const handleRight = (event) => {
     event.preventDefault();
     window.dispatchEvent(new CustomEvent("lavender:close-message-menus", { detail: messageItem._id }));
-    setContextOpen(true);
+    // Portaled and clamped: a menu inside the list would be painted under
+    // later rows, and opening it near the edge would scroll the whole page.
+    const MENU_WIDTH = 176;
+    const MENU_HEIGHT = 340;
+    setContextOpen({
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - MENU_WIDTH - 8)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - MENU_HEIGHT - 8)),
+    });
   };
   const onClick = useCallback(() => {
     props.infoPanel.current = messageItem.uid;
@@ -143,8 +153,8 @@ export default function (props) {
     props.setForward([messageItem, profile]);
   };
   const reportHandle = () => {
-    const proceed = () => {
-      report(messageItem._id, "message");
+    const proceed = (reason) => {
+      report(messageItem._id, "message", reason);
       setConfirmation(null);
     };
     if (shouldConfirm("report-message")) {
@@ -177,6 +187,13 @@ export default function (props) {
   };
   const myReaction = (messageItem.reactions||[]).find(r => (r.users||[]).includes(userID.current));
   const canEdit = flag && messageItem.content && Date.now() - time.getTime() <= EDIT_WINDOW_MS;
+  const isChatAdmin = chat.type === 'group' && ((chat.admins||[]).includes(userID.current) || chat.owner === userID.current);
+  const canDelete = flag || isChatAdmin;
+  const longPressTimer = useRef(null);
+  const startLongPress = () => {
+    longPressTimer.current = setTimeout(() => props.onEnterSelection(messageItem._id), 450);
+  };
+  const cancelLongPress = () => clearTimeout(longPressTimer.current);
   const deleteHandle = () => {
     const proceed = () => {
       setDeleting(true);
@@ -204,8 +221,16 @@ export default function (props) {
   return (
     <div
       id={messageItem._id}
-      className={`w-full flex ${grouped ? "mt-0.5" : "mt-2.5"} justify-${flag ? "end" : "start"} animate-fade-in-up`}
+      onClick={props.selectionMode ? () => props.onToggleSelect(messageItem._id) : undefined}
+      onPointerDown={props.selectionMode ? undefined : (event) => { if (event.pointerType === "touch") startLongPress(); }}
+      onPointerUp={cancelLongPress}
+      onPointerCancel={cancelLongPress}
+      onPointerMove={cancelLongPress}
+      className={`message-row w-full flex ${grouped ? "mt-0.5" : "mt-2.5"} ${flag ? "justify-end" : "justify-start"} ${flag ? "message-row-out" : "message-row-in"} ${props.selectionMode ? "is-selecting" : ""} ${props.selected ? "is-selected" : ""} ${props.highlighted ? "is-highlighted" : ""}`}
     >
+      {props.selectionMode && (
+        <span className={`message-select-check ${props.selected ? "is-checked" : ""}`} aria-hidden="true" />
+      )}
       <div className="mr-2 w-7 h-full flex shrink-0">
         {!grouped && !flag && (
           <button
@@ -224,8 +249,7 @@ export default function (props) {
           </div>
         )}
         <div
-          className={`message-bubble px-2.5 py-1.5 shadow-sm relative
-            ${flag ? "bg-[#DCF8C6] dark:bg-[#245a4b] dark:text-gray-100" : "bg-white dark:bg-gray-700 dark:text-gray-100"}
+          className={`message-bubble ${flag ? "message-bubble-out" : "message-bubble-in"} ${messageItem.status === "!" ? "is-failed" : ""} ${messageItem.status === "⧖" ? "is-pending" : ""} px-2.5 py-1.5 relative
             ${flag
               ? `rounded-2xl ${grouped ? "rounded-tr-2xl" : "rounded-tr-md"}`
               : `rounded-2xl ${grouped ? "rounded-tl-2xl" : "rounded-tl-md"}`}
@@ -234,7 +258,7 @@ export default function (props) {
           <div>
             {!grouped && !flag && (
               <div
-                style={{ color: profile.color }}
+                style={{ color: readableColor(profile.color) }}
                 className="text-xs font-bold mb-0.5"
               >
                 {profile.name}
@@ -243,14 +267,11 @@ export default function (props) {
 
             {repliedMessage ? (
               <div
-                onClick={() => {
-                  const element = document.getElementById(props.reply_to);
-                  if (element) element.scrollIntoView({ block: "center" });
-                }}
+                onClick={() => props.jumpToMessage(repliedMessage)}
                 className="cursor-pointer flex flex-col overflow-clip rounded-md pl-2 py-1 mb-1 bg-black/5 border-l-2 text-xs"
                 style={{ borderColor: repliedProfile.color || '#a78bfa' }}
               >
-                <p style={{ color: repliedProfile.color }} className="truncate font-bold">{repliedProfile.name || "Unknown"}</p>
+                <p style={{ color: readableColor(repliedProfile.color) }} className="truncate font-bold">{repliedProfile.name || "Unknown"}</p>
                 <span className="truncate text-gray-500">
                   {repliedMessage.content}
                 </span>
@@ -259,11 +280,13 @@ export default function (props) {
 
             {messageItem.location && (
               <div className="mb-1">
-                <LocationMessage
-                  location={messageItem.location}
-                  flag={flag}
-                  onStop={() => socket.current.emit("stopLiveLocation", { id: messageItem._id })}
-                />
+                <Suspense fallback={<div className="flex h-32 w-56 items-center justify-center"><Spinner size="sm" /></div>}>
+                  <LocationMessage
+                    location={messageItem.location}
+                    flag={flag}
+                    onStop={() => socket.current.emit("stopLiveLocation", { id: messageItem._id })}
+                  />
+                </Suspense>
               </div>
             )}
 
@@ -271,22 +294,22 @@ export default function (props) {
               <div className="flex flex-wrap gap-1 mb-1">
                 {messageItem.attachments.map((a, idx) =>
                   (a.contentType || "").startsWith("image/") ? (
-                    <a key={idx} href={`${apiOrigin}/${a.src}`} target="_blank" rel="noreferrer">
-                      <img src={`${apiOrigin}/${a.src}`} alt={a.name} className="max-h-40 max-w-52 rounded-2xl object-cover" />
-                    </a>
+                    <button key={idx} type="button" className="message-media" onClick={() => setViewer({ type: "image", src: attachmentUrl(a, mediaToken), name: a.name })}>
+                      <img src={attachmentUrl(a, mediaToken)} alt={a.name} loading="lazy" className="max-h-40 max-w-52 rounded-2xl object-cover" />
+                    </button>
                   ) : (a.contentType || "").startsWith("video/") ? (
-                    <video key={idx} src={`${apiOrigin}/${a.src}`} controls className="max-h-40 max-w-52 rounded-2xl" />
+                    <video key={idx} src={attachmentUrl(a, mediaToken)} controls className="max-h-40 max-w-52 rounded-2xl" />
                   ) : (a.contentType || "").startsWith("audio/") ? (
-                    <VoiceNote key={idx} src={`${apiOrigin}/${a.src}`} />
+                    <VoiceNote key={idx} src={attachmentUrl(a, mediaToken)} />
                   ) : (
                     <div key={idx} className="w-64">
                       <DocumentPreview
-                        src={`${apiOrigin}/${a.src}`}
+                        src={attachmentUrl(a, mediaToken)}
                         name={a.name}
                         contentType={a.contentType}
                         size={formatSize(a.size)}
                         onDownload={() =>
-                          downloadFile(`${apiOrigin}/${a.src}`, a.name).catch(() => toast.error("Couldn't download file"))
+                          downloadFile(attachmentUrl(a, mediaToken), a.name).catch(() => toast.error("Couldn't download file"))
                         }
                       />
                     </div>
@@ -297,7 +320,7 @@ export default function (props) {
 
             {(() => {
               const footer = (
-                <span className="shrink-0 flex items-center gap-0.5 text-[0.65rem] text-gray-400 ml-auto -mb-0.5">
+                <span className="message-meta shrink-0 flex items-center gap-0.5 text-[0.65rem] ml-auto -mb-0.5">
                   {isPinned && <span title="Pinned">📌</span>}
                   {isStarred && <span className="text-amber-500">★</span>}
                   {messageItem.edited && <span className="italic">edited</span>}
@@ -320,14 +343,16 @@ export default function (props) {
                             attachments: messageItem.attachments,
                           }
                         )}
-                        className="font-bold text-[var(--autumn-clay)] underline decoration-dotted underline-offset-2"
+                        className="message-retry font-bold underline decoration-dotted underline-offset-2"
                       >
                         Retry
                       </button>
                     ) : (
-                      <span className={messageItem.status === "✔✔" ? "text-purple-500" : ""}>
-                        {messageItem.status}
-                      </span>
+                      <span
+                        role="img"
+                        aria-label={messageItem.status === "✔✔" ? "Read" : "Sent"}
+                        className={`message-ticks ${messageItem.status === "✔✔" ? "is-read" : ""}`}
+                      />
                     )
                   ))}
                 </span>
@@ -335,7 +360,7 @@ export default function (props) {
               if (messageItem.content) {
                 return (
                   <div className="flex items-end gap-2 flex-wrap">
-                    <span className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap break-words flex-1 min-w-0">
+                    <span className="message-text text-sm whitespace-pre-wrap break-words flex-1 min-w-0">
                       {messageItem.content}
                     </span>
                     {footer}
@@ -354,7 +379,7 @@ export default function (props) {
                   <button
                     key={r.emoji}
                     onClick={() => reactHandle(r.emoji)}
-                    className={`text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 ${
+                    className={`message-reaction-chip text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 ${
                       (r.users||[]).includes(userID.current)
                         ? "bg-[var(--accent-light)] border-[var(--accent)]"
                         : "bg-black/5 dark:bg-white/10 border-transparent"
@@ -369,6 +394,7 @@ export default function (props) {
           </div>
           {confirmation && <ConfirmDialog {...confirmation} onCancel={() => setConfirmation(null)} />}
         </div>
+        {viewer && <MediaViewer item={viewer} onClose={() => setViewer(null)} />}
         <button
           type="button"
           onClick={() => {
@@ -382,7 +408,7 @@ export default function (props) {
         </button>
         {showReactions && (
           <div
-            className={`absolute z-30 flex gap-1 bg-white dark:bg-gray-800 border border-black/5 dark:border-white/10 shadow-lg rounded-full px-2 py-1 -top-11 ${flag ? "right-0" : "left-0"}`}
+            className={`message-reaction-picker absolute z-30 flex gap-1 bg-white dark:bg-gray-800 border border-black/5 dark:border-white/10 shadow-lg rounded-full px-2 py-1 -top-11 ${flag ? "right-0" : "left-0"}`}
           >
             {REACTION_EMOJIS.map((e) => (
               <button
@@ -393,10 +419,13 @@ export default function (props) {
             ))}
           </div>
         )}
+      </div>
+      {contextOpen && createPortal(
         <div
           onClick={closeMenu}
           ref={contextref}
-          className={`message-context-menu font-semibold absolute text-sm w-44 py-1 h-fit z-20 ${contextOpen ? "block" : "hidden"} ${flag ? "right-0" : "left-0"} top-full mt-1`}
+          style={{ left: contextOpen.x, top: contextOpen.y }}
+          className="message-context-menu is-open font-semibold fixed text-sm w-44 py-1 h-fit z-50"
         >
           <button
             onClick={() => { replyHandle(); closeMenu(); }}
@@ -449,12 +478,22 @@ export default function (props) {
           )}
 
           <button
-            onClick={() => { deleteHandle(); closeMenu(); }}
+            onClick={() => { props.onEnterSelection(messageItem._id); closeMenu(); }}
             className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
           >
-            <img src={del} className="w-4 h-4 dark:invert dark:opacity-80"></img>
-            <div>Delete</div>
+            <span className="w-4 h-4 flex items-center justify-center text-gray-500">✓</span>
+            <div>Select</div>
           </button>
+
+          {canDelete && (
+            <button
+              onClick={() => { deleteHandle(); closeMenu(); }}
+              className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <img src={del} className="w-4 h-4 dark:invert dark:opacity-80"></img>
+              <div>Delete</div>
+            </button>
+          )}
 
           <button
             onClick={() => { reportHandle(); closeMenu(); }}
@@ -463,8 +502,9 @@ export default function (props) {
             <img src={reportIcon} className="w-4 h-4 dark:invert dark:opacity-80"></img>
             <div>Report</div>
           </button>
-        </div>
-      </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

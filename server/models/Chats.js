@@ -46,6 +46,13 @@ const Chats=new mongoose.Schema
     default:false,
     index:true
    },
+   // Admin-issued join secret. select:false keeps it out of the chat docs
+   // pushed to ordinary members; aggregations must exclude it explicitly.
+   inviteCode:{
+    type:String,
+    select:false,
+    index:{unique:true,sparse:true},
+   },
    pinned:{
     default:[],
     ref:'Messages',

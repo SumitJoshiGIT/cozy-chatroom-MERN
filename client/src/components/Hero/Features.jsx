@@ -70,7 +70,7 @@ function DayDivider({ children }) {
 
 export default function Features() {
   return (
-    <div className="w-full min-h-screen">
+    <div className="w-full h-screen overflow-y-auto overscroll-contain">
       <div className="max-w-4xl mx-auto px-6 pt-14 pb-24">
 
         <Link to="/" className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
