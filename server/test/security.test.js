@@ -59,7 +59,8 @@ test.before(async () => {
     cwd: path.join(__dirname, '..'),
     // Google's strategy throws at startup without these, and CI has no .env.
     env: {
-      ...process.env, PORT, NODE_ENV: 'development', CLIENT_ORIGIN: ORIGIN, UPLOAD_DIR, AUTH_RATE_LIMIT: '1000', DEMO_ENABLED: 'true',
+      ...process.env, PORT, NODE_ENV: 'development', CLIENT_ORIGIN: ORIGIN, UPLOAD_DIR, AUTH_RATE_LIMIT: '1000', DEMO_ENABLED: 'true', CALL_RING_MS: '700', CALL_RECONNECT_GRACE_MS: '200',
+      LIVEKIT_URL: 'ws://localhost:7880', LIVEKIT_API_KEY: 'test-key', LIVEKIT_API_SECRET: 'test-secret-test-secret-test-secret',
       GOOGLE_CLIENT_ID: 'test-client-id', GOOGLE_CLIENT_SECRET: 'test-client-secret', GOOGLE_REDIRECT_URI: `${BASE}/auth/google/oauth/callback`,
     },
     stdio: ['ignore', 'ignore', 'inherit'],
@@ -427,6 +428,64 @@ test('logout closes this device only; logout everywhere closes all and ends sess
   const dead = io(BASE, { transports: ['websocket'], forceNew: true, reconnection: false, extraHeaders: { Cookie: three, Origin: ORIGIN } });
   sockets.push(dead);
   assert.equal(await once(dead, 'auth'), null, 'old session still authenticates');
+});
+
+const emitAck = (socket, event, data) => new Promise((resolve) => socket.timeout(2000).emit(event, data, (err, res) => resolve(err ? null : res)));
+const callToken = (user, cid) => fetch(`${BASE}/calls/token`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Origin: ORIGIN, Authorization: `Bearer ${issueToken(user._id)}` },
+  body: JSON.stringify({ cid, roomName: `lavender-${cid}` }),
+}).then((r) => r.status);
+
+test('a ringing call needs answering; busy users, decline and missed calls behave', async () => {
+  const [aliceSocket, bobSocket, carolSocket] = await Promise.all([connect(alice), connect(bob), connect(mallory)]);
+  const cid = String(dm._id);
+  const other = await models.ChatsModel.create({ type: 'private', users: [mallory._id, bob._id] });
+  await models.UsersModel.updateMany({ _id: { $in: [mallory._id, bob._id] } }, { $addToSet: { Chats: other._id } });
+  const lateCarol = await connect(mallory);
+
+  const ringing = once(bobSocket, 'incomingCall');
+  assert.equal((await emitAck(aliceSocket, 'startCall', { cid, kind: 'audio' })).ok, true);
+  assert.ok(await ringing);
+
+  assert.equal((await emitAck(bobSocket, 'startCall', { cid, kind: 'audio' })).ok, false, 'calling back must not join');
+  assert.equal(await callToken(bob, cid), 403, 'no room token before answering');
+  const busy = await emitAck(lateCarol, 'startCall', { cid: String(other._id), kind: 'audio' });
+  assert.match(busy.message, /another call/);
+
+  const declined = once(aliceSocket, 'callEnded');
+  bobSocket.emit('declineCall', { cid });
+  assert.equal((await declined).reason, 'declined');
+  await wait(150);
+  assert.ok(await models.MessagesModel.findOne({ chat: dm._id, type: 'call', content: 'Declined voice call' }));
+
+  await emitAck(aliceSocket, 'startCall', { cid, kind: 'video' });
+  const answered = once(aliceSocket, 'callAnswered');
+  assert.equal((await emitAck(bobSocket, 'answerCall', { cid })).ok, true);
+  assert.ok(await answered);
+  assert.notEqual(await callToken(bob, cid), 403, 'answering grants a token');
+  const ended = once(bobSocket, 'callEnded');
+  aliceSocket.emit('endCall', { cid });
+  assert.equal((await ended).reason, 'ended');
+
+  await emitAck(aliceSocket, 'startCall', { cid, kind: 'video' });
+  const missed = once(aliceSocket, 'callEnded', 1500);
+  assert.equal((await missed).reason, 'missed');
+  await wait(150);
+  assert.ok(await models.MessagesModel.findOne({ chat: dm._id, type: 'call', content: 'Missed video call' }));
+  assert.equal((await emitAck(bobSocket, 'startCall', { cid, kind: 'audio' })).ok, true, 'ended calls free both users');
+  bobSocket.emit('endCall', { cid });
+  carolSocket.disconnect();
+});
+
+test('dropping off a call ends it after the grace period', async () => {
+  const [aliceSocket, bobSocket] = await Promise.all([connect(alice), connect(bob)]);
+  const cid = String(dm._id);
+  await emitAck(aliceSocket, 'startCall', { cid, kind: 'audio' });
+  await emitAck(bobSocket, 'answerCall', { cid });
+  const ended = once(bobSocket, 'callEnded', 1500);
+  aliceSocket.disconnect();
+  assert.equal((await ended).reason, 'ended');
 });
 
 test('orphaned attachments are removed; referenced and fresh ones stay', async () => {

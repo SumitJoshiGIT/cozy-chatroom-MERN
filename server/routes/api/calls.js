@@ -2,6 +2,7 @@ const express = require('express');
 const { AccessToken } = require('livekit-server-sdk');
 const { verifyTokenPayload } = require('../../utils/socketAuthTokens');
 const models = require('../../models/exports');
+const callState = require('../../utils/callState');
 const { Types } = require('mongoose');
 
 const callsRouter = express.Router();
@@ -39,6 +40,9 @@ callsRouter.post('/calls/token', async (req, res) => {
     const chat = await models.ChatsModel.findById(cid, 'users');
     const isMember = chat && (chat.users || []).some((id) => String(id) === String(userId));
     if (!isMember) return res.status(403).json({ status: false, message: 'You are not a member of this chat' });
+    // Only people who placed or answered the call get into the room, so nobody
+    // connects to someone whose phone is still ringing.
+    if (!callState.canJoin(cid, String(userId))) return res.status(403).json({ status: false, message: 'This call has ended' });
 
     const user = await models.UsersModel.findById(userId, 'name username img');
     if (!user) return res.status(401).json({ status: false, message: 'User not found' });

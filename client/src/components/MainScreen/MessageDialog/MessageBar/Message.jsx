@@ -218,6 +218,16 @@ export default function (props) {
 
   const grouped = props.pre == messageItem.uid;
   const pad = (n) => n.toString().padStart(2, "0");
+  if (messageItem.type === "call") {
+    return (
+      <div id={messageItem._id} className="message-row w-full flex justify-center mt-2.5">
+        <span className="message-call-log">
+          {flag ? messageItem.content.replace(/^Missed/, "Unanswered") : messageItem.content}
+          {" · "}{pad(time.getHours())}:{pad(time.getMinutes())}
+        </span>
+      </div>
+    );
+  }
   return (
     <div
       id={messageItem._id}

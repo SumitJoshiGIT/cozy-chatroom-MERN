@@ -1,6 +1,7 @@
 const models = require("../../models/exports");
 const { verifyTokenPayload, issueMediaToken } = require("../../utils/socketAuthTokens");
 const { webpush, enabled: webPushEnabled } = require("../../utils/webPush");
+const callState = require("../../utils/callState");
 const { UPLOAD_DIR, ATTACHMENT_DIR, ATTACHMENT_PREFIX, removeUpload } = require("../../utils/uploads");
 const ObjectID = require("mongoose").Types.ObjectId;
 const crypto = require("crypto");
@@ -48,6 +49,7 @@ const MAX_PINS = 6;
 const MAX_REACTIONS_PER_MESSAGE = 20;
 const MAX_GROUP_MEMBERS = 256;
 const DISAPPEARING_DURATIONS = [24 * 60 * 60, 7 * 24 * 60 * 60, 90 * 24 * 60 * 60];
+const CALL_RECONNECT_GRACE_MS = Number(process.env.CALL_RECONNECT_GRACE_MS) || 10000;
 const EVENT_BUCKET_CAPACITY = 300;
 const EVENT_BUCKET_REFILL_PER_SEC = 30;
 const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
@@ -153,6 +155,30 @@ function lastMessageSnapshot(message) {
 
 async function updateLastMessage(cid, message) {
   await models.ChatsModel.findByIdAndUpdate(cid, { $set: { lastMessage: lastMessageSnapshot(message) } });
+}
+
+// Missed and declined calls are ordinary messages, so they get the history,
+// sidebar preview and unread badge without any call-specific sync.
+async function recordCall(io, call, outcome) {
+  try {
+    const chat = await models.ChatsModel.findById(call.cid);
+    if (!chat) return;
+    const message = new models.MessagesModel({
+      chat: call.cid,
+      uid: call.callerId,
+      type: "call",
+      content: `${outcome} ${call.kind === "audio" ? "voice" : "video"} call`,
+      status: "✔",
+      expiresAt: chat.disappearingDuration ? new Date(Date.now() + chat.disappearingDuration * 1000) : null,
+    });
+    await message.save();
+    await updateLastMessage(call.cid, message);
+    const refreshed = await models.ChatsModel.findById(call.cid);
+    io.to(call.cid).emit("chat", { type: "chats", chats: [refreshed] });
+    io.to(call.cid).emit("messages", { id: call.cid, data: [message] });
+  } catch (err) {
+    console.error("[socket] recordCall failed", err.message);
+  }
 }
 
 // Recomputes the preview from whatever message survives - used after a
@@ -634,25 +660,117 @@ function onConnection(socket, io) {
     socket.to(cid).emit("typing", { cid, uid: selfId });
   });
 
-  socket.on("startCall", async ({ cid, kind = "video" } = {}) => {
-    if (!inChat(cid)) return;
+  const finishCall = (call, reason) => {
+    const members = [...call.members];
+    callState.end(call);
+    members.forEach((uid) => io.to(userRoom(uid)).emit("callEnded", { cid: call.cid, reason }));
+  };
+
+  const onRingTimeout = (call) => {
+    const stopped = callState.stopRinging(call);
+    stopped.forEach((uid) => io.to(userRoom(uid)).emit("callStopRinging", { cid: call.cid }));
+    if (call.state !== "ringing") return;
+    finishCall(call, "missed");
+    recordCall(io, call, "Missed");
+  };
+
+  const leaveCall = (call, uid) => {
+    const wasRinging = call.state === "ringing";
+    if (!callState.leave(call, uid)) return;
+    finishCall(call, wasRinging ? "cancelled" : "ended");
+    if (wasRinging) recordCall(io, call, "Missed");
+  };
+
+  socket.on("startCall", async ({ cid, kind = "video" } = {}, ack) => {
+    const reply = typeof ack === "function" ? ack : () => {};
+    const refuse = (message) => reply({ ok: false, message });
+    if (!inChat(cid)) return refuse("You are not in this chat.");
     const chat = await models.ChatsModel.findById(cid, "users type");
-    if (!chat || !(chat.users || []).some((id) => sameId(id, selfId))) return;
-    if (chat.type === "private") {
-      const otherId = chat.users.find((u) => !sameId(u, selfId));
-      const other = otherId && await models.UsersModel.findById(otherId, "blocked");
-      if (other && other.blocked.some((b) => sameId(b, selfId))) return;
+    if (!chat || !(chat.users || []).some((id) => sameId(id, selfId))) return refuse("You are not in this chat.");
+    const callKind = kind === "audio" ? "audio" : "video";
+
+    const existing = callState.get(cid);
+    if (existing) {
+      if (existing.joined.has(selfId)) return refuse("You are already on this call.");
+      if (existing.ringing.has(selfId)) return refuse("You have an incoming call here. Answer or decline it.");
+      if (existing.group && existing.state === "active" && !callState.isBusy(selfId)) {
+        callState.join(existing, selfId, socket.id);
+        return reply({ ok: true, kind: existing.kind, ringing: false });
+      }
+      return refuse("This chat is already on a call.");
     }
-    socket.to(cid).emit("incomingCall", {
+    if (callState.isBusy(selfId)) return refuse("You are already on a call.");
+
+    const members = [...new Set(chat.users.map(String))];
+    const others = members.filter((uid) => uid !== selfId);
+    if (!others.length) return refuse("You can't call yourself.");
+    if (chat.type === "private") {
+      const other = await models.UsersModel.findById(others[0], "blocked name username");
+      if (!other || other.blocked.some((b) => sameId(b, selfId))) return refuse("This call could not be placed.");
+      if (callState.isBusy(others[0])) {
+        recordCall(io, { cid, callerId: selfId, kind: callKind }, "Missed");
+        return refuse(`${other.name || other.username || "This person"} is on another call.`);
+      }
+    }
+    // Re-checked because the lookups above let another call start meanwhile.
+    if (callState.get(cid) || callState.isBusy(selfId)) return refuse("This chat is already on a call.");
+    const ringing = others.filter((uid) => !callState.isBusy(uid));
+    if (!ringing.length) return refuse("Everyone is on another call.");
+
+    callState.create({
+      cid, callerId: selfId, socketId: socket.id, kind: callKind, group: chat.type !== "private",
+      members, ringing, onTimeout: onRingTimeout,
+    });
+    ringing.forEach((uid) => io.to(userRoom(uid)).emit("incomingCall", {
       cid,
       roomName: `lavender-${cid}`,
-      kind: kind === "audio" ? "audio" : "video",
+      kind: callKind,
       caller: { id: selfId, name: profile.name || profile.username || "Lavender user" },
-    });
+    }));
+    reply({ ok: true, kind: callKind, ringing: true });
+  });
+
+  socket.on("answerCall", ({ cid } = {}, ack) => {
+    const reply = typeof ack === "function" ? ack : () => {};
+    const call = callState.get(cid);
+    if (!call || !call.ringing.has(selfId)) return reply({ ok: false, message: "This call has ended." });
+    callState.answer(call, selfId, socket.id);
+    socket.to(userRoom(selfId)).emit("callStopRinging", { cid });
+    for (const uid of call.members) io.to(userRoom(uid)).emit("callAnswered", { cid, uid: selfId });
+    reply({ ok: true, kind: call.kind });
+  });
+
+  socket.on("declineCall", ({ cid } = {}) => {
+    const call = callState.get(cid);
+    if (!call || !call.ringing.has(selfId)) return;
+    const nobodyLeft = callState.decline(call, selfId);
+    socket.to(userRoom(selfId)).emit("callStopRinging", { cid });
+    if (!nobodyLeft) return;
+    finishCall(call, "declined");
+    recordCall(io, call, "Declined");
   });
 
   socket.on("endCall", ({ cid } = {}) => {
-    if (inChat(cid)) socket.to(cid).emit("callEnded", { cid });
+    const call = callState.get(cid);
+    if (call && call.joined.has(selfId)) leaveCall(call, selfId);
+  });
+
+  // A dropped socket doesn't end the media connection, so a reconnecting
+  // client reclaims its place in the call before the grace period runs out.
+  socket.on("resumeCall", ({ cid } = {}) => {
+    const call = callState.get(cid);
+    if (call && call.joined.has(selfId)) call.joined.set(selfId, socket.id);
+    else socket.emit("callEnded", { cid, reason: "ended" });
+  });
+
+  // rawSocketOn: the rate limiter must never swallow this one.
+  rawSocketOn("disconnect", () => {
+    const active = callState.forUser(selfId);
+    if (!active || active.joined.get(selfId) !== socket.id) return;
+    setTimeout(() => {
+      const call = callState.get(active.cid);
+      if (call && call.joined.get(selfId) === socket.id) leaveCall(call, selfId);
+    }, CALL_RECONNECT_GRACE_MS);
   });
 
   socket.on("blockUser", async ({ id } = {}) => {

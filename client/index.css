@@ -1309,6 +1309,21 @@ button:focus-visible,
   }
 }
 
+.message-call-log {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  font-size: 0.75rem;
+}
+
+.call-ringing-status {
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
 .message-day-label {
   color: var(--text) !important;
   border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));

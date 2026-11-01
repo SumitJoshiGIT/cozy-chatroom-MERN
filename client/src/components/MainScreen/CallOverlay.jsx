@@ -17,6 +17,8 @@ import { Track } from 'livekit-client';
 import { apiOrigin } from '../../apiOrigin';
 import { getStoredAuthToken } from '../../socketAuthToken';
 
+const END_NOTICES = { missed: 'No answer', declined: 'Call declined' };
+
 async function getCallToken(cid, roomName) {
   const headers = { 'Content-Type': 'application/json' };
   const authToken = getStoredAuthToken();
@@ -118,24 +120,57 @@ export default function CallOverlay({ socket }) {
   const [position, setPosition] = useState(null);
   const dragRef = useRef(null);
   const callRef = useRef(null);
+  const activeCallRef = useRef(null);
 
   useEffect(() => {
     const currentSocket = socket.current;
     if (!currentSocket) return undefined;
 
+    const clearIncoming = (cid) => setIncoming((pendingCall) => pendingCall?.cid === cid ? null : pendingCall);
     const onIncoming = (data) => setIncoming(data);
-    const onEnded = ({ cid }) => {
-      setCall((activeCall) => activeCall?.cid === cid ? null : activeCall);
-      setIncoming((pendingCall) => pendingCall?.cid === cid ? null : pendingCall);
+    const onStopRinging = ({ cid }) => clearIncoming(cid);
+    const onAnswered = ({ cid }) => {
+      setCall((activeCall) => activeCall?.cid === cid ? { ...activeCall, ringing: false } : activeCall);
+    };
+    const onEnded = ({ cid, reason }) => {
+      clearIncoming(cid);
+      setCall((activeCall) => {
+        if (activeCall?.cid !== cid) return activeCall;
+        if (activeCall.ringing && END_NOTICES[reason]) setError(END_NOTICES[reason]);
+        return null;
+      });
+    };
+    const onReconnect = () => {
+      if (activeCallRef.current) currentSocket.emit('resumeCall', { cid: activeCallRef.current.cid });
     };
 
     currentSocket.on('incomingCall', onIncoming);
+    currentSocket.on('callStopRinging', onStopRinging);
+    currentSocket.on('callAnswered', onAnswered);
     currentSocket.on('callEnded', onEnded);
+    currentSocket.on('connect', onReconnect);
     return () => {
       currentSocket.off('incomingCall', onIncoming);
+      currentSocket.off('callStopRinging', onStopRinging);
+      currentSocket.off('callAnswered', onAnswered);
       currentSocket.off('callEnded', onEnded);
+      currentSocket.off('connect', onReconnect);
     };
   }, [socket]);
+
+  useEffect(() => { activeCallRef.current = call; }, [call]);
+
+  useEffect(() => {
+    if (!error) return undefined;
+    const timer = setTimeout(() => setError(''), 5000);
+    return () => clearTimeout(timer);
+  }, [error]);
+
+  useEffect(() => {
+    const onCallError = (event) => setError(event.detail);
+    window.addEventListener('lavender:call-error', onCallError);
+    return () => window.removeEventListener('lavender:call-error', onCallError);
+  }, []);
 
   useEffect(() => {
     const onStartCall = async (event) => {
@@ -145,6 +180,7 @@ export default function CallOverlay({ socket }) {
         const credentials = await getCallToken(details.cid, details.roomName);
         setCall({ ...details, ...credentials });
       } catch (err) {
+        socket.current.emit('endCall', { cid: details.cid });
         setError(err.message || 'Unable to start call');
       }
     };
@@ -152,15 +188,27 @@ export default function CallOverlay({ socket }) {
     return () => window.removeEventListener('lavender:start-call', onStartCall);
   }, []);
 
-  const join = async (details) => {
-    try {
-      setError('');
-      setIncoming(null);
-      const credentials = await getCallToken(details.cid, details.roomName);
-      setCall({ ...details, ...credentials });
-    } catch (err) {
-      setError(err.message || 'Unable to join call');
-    }
+  const join = (details) => {
+    setError('');
+    setIncoming(null);
+    socket.current.timeout(6000).emit('answerCall', { cid: details.cid }, async (timedOut, result) => {
+      if (timedOut || !result?.ok) {
+        setError(result?.message || 'Unable to join call');
+        return;
+      }
+      try {
+        const credentials = await getCallToken(details.cid, details.roomName);
+        setCall({ ...details, kind: result.kind, ...credentials });
+      } catch (err) {
+        socket.current.emit('endCall', { cid: details.cid });
+        setError(err.message || 'Unable to join call');
+      }
+    });
+  };
+
+  const decline = (details) => {
+    socket.current.emit('declineCall', { cid: details.cid });
+    setIncoming(null);
   };
 
   const leave = () => {
@@ -224,7 +272,7 @@ export default function CallOverlay({ socket }) {
           <div
             className="call-header absolute left-0 right-0 top-0 z-10 flex items-center justify-between px-4 py-3"
           >
-            <span aria-hidden="true" />
+            {call.ringing ? <span className="call-ringing-status">Ringing…</span> : <span aria-hidden="true" />}
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
@@ -276,7 +324,7 @@ export default function CallOverlay({ socket }) {
             </button>
             <button
               type="button"
-              onClick={() => setIncoming(null)}
+              onClick={() => decline(incoming)}
               className="incoming-call-decline rounded-full px-3 py-2 text-sm font-semibold"
             >
               Decline

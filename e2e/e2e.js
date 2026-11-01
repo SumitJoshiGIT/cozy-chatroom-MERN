@@ -413,6 +413,25 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     await b.waitForFunction(() => !document.querySelector('.lk-room-container, [data-lk-theme]'));
   });
 
+  await check('calling back while ringing does not connect; decline and missed calls are logged', async () => {
+    await a.getByRole('button', { name: 'Start audio call' }).click();
+    await b.getByRole('button', { name: 'Answer' }).waitFor();
+    // The incoming card covers this button at most widths, so bypass hit-testing.
+    await b.getByRole('button', { name: 'Start audio call' }).dispatchEvent('click');
+    await b.getByText('You have an incoming call here').waitFor();
+    assert(!(await b.locator('.lk-room-container, [data-lk-theme]').count()), 'callee connected without answering');
+    await b.getByRole('button', { name: 'Decline' }).click();
+    await a.getByText('Call declined').waitFor();
+    await b.locator('.message-call-log', { hasText: 'Declined voice call' }).waitFor();
+    await a.waitForFunction(() => !document.querySelector('.lk-room-container, [data-lk-theme]'));
+    await a.getByRole('button', { name: 'Start audio call' }).click();
+    await b.getByRole('button', { name: 'Answer' }).waitFor();
+    await a.getByRole('button', { name: 'End call' }).click();
+    await b.getByRole('button', { name: 'Answer' }).waitFor({ state: 'detached' });
+    await b.locator('.message-call-log', { hasText: 'Missed voice call' }).waitFor();
+    await a.locator('.message-call-log', { hasText: 'Unanswered voice call' }).waitFor();
+  });
+
   await check('reconnects after a network drop and keeps receiving', async () => {
     await a.context().setOffline(true);
     await a.waitForTimeout(500);
