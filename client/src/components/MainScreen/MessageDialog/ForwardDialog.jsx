@@ -6,7 +6,7 @@ import Avatar from "../../ui/Avatar";
 import close from "/close.svg";
 
 export default function ForwardDialog({ items, onClose }) {
-  const { chatdata, socket, userID } = useCtx();
+  const { chatdata, userID, sendSealed } = useCtx();
   const [selected, setSelected] = useState(null);
   const [sent, setSent] = useState(false);
   const messages = items.filter((m) => m && m.content);
@@ -19,10 +19,7 @@ export default function ForwardDialog({ items, onClose }) {
   const forward = () => {
     if (!selected || messages.length === 0) return;
     messages.forEach((message) => {
-      socket.current.emit("sendMessage", {
-        cid: selected,
-        content: message.content,
-      });
+      sendSealed({ event: "sendMessage", cid: selected, type: "chat", content: message.content });
     });
     setSent(true);
     setTimeout(onClose, 500);

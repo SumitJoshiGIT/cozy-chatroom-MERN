@@ -16,7 +16,10 @@ import pinIcon from "/pin.svg";
 import { getWallpaper, setWallpaperFor } from "../../../wallpaper";
 import Spinner from "../../ui/Spinner";
 export default function MessageDialog(props) {
-  const { Messages, setMessages, chatID, scrollable, socket, chatdata, userID, profiles, db, unpinMessage, loadedChats, hasMoreHistory } = useCtx();
+  const { Messages, setMessages, chatID, scrollable, socket, chatdata, userID, profiles, db, unpinMessage, loadedChats, hasMoreHistory, openMessage } = useCtx();
+  const messagesRef = useRef(Messages);
+  messagesRef.current = Messages;
+  const searchTerm = useRef("");
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [showJump, setShowJump] = useState(false);
   const nearBottom = useRef(true);
@@ -62,7 +65,11 @@ export default function MessageDialog(props) {
   useEffect(() => {
     const handler = (data) => {
       if (data.cid !== chatID.id || data.reqId !== chatSearchReqId.current) return;
-      setChatSearchResults(data.results || []);
+      // The server can't search encrypted text, so that part runs here, over
+      // the messages this device has loaded.
+      const local = Object.values(messagesRef.current[chatID.id] || {})
+        .filter((m) => m.encrypted && !m.locked && !m.unreadable && (m.content || "").toLowerCase().includes(searchTerm.current));
+      setChatSearchResults([...(data.results || []), ...local].sort((a, b) => a.mid - b.mid));
       setChatSearchIndex(0);
     };
     socket.current.on("searchMessagesInChat", handler);
@@ -107,6 +114,7 @@ export default function MessageDialog(props) {
     }
     chatSearchDebounce.current = setTimeout(() => {
       chatSearchReqId.current += 1;
+      searchTerm.current = query.trim().toLowerCase();
       socket.current.emit("searchMessagesInChat", { cid: chatID.id, query: query.trim(), reqId: chatSearchReqId.current });
     }, 250);
   }, [chatID.id]);
@@ -323,8 +331,9 @@ export default function MessageDialog(props) {
   }, [chatID.id, pinnedIds.join(","), messagesById]);
 
   useEffect(() => {
-    const handler = ({ cid, results }) => {
-      if (cid !== chatID.id || !results || !results.length) return;
+    const handler = async ({ cid, results: sealedResults }) => {
+      if (cid !== chatID.id || !sealedResults || !sealedResults.length) return;
+      const results = await Promise.all(sealedResults.map(openMessage));
       results.forEach((msg) => pendingPinFetch.current.delete(msg._id.toString()));
       setMessages((prev) => {
         const chatStore = { ...(prev[cid] || {}) };

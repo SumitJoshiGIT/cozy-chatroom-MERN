@@ -1309,6 +1309,12 @@ button:focus-visible,
   }
 }
 
+.e2ee-prompt {
+  border: 1px solid var(--border);
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
 .message-call-log {
   padding: 0.25rem 0.75rem;
   border: 1px solid var(--border);

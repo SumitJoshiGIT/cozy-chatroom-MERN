@@ -77,6 +77,17 @@ const Users=new mongoose.Schema
       default:null
    },
    // Bearer tokens issued before this moment are rejected (set on logout).
+   // End-to-end encryption. The private key only reaches the server inside this
+   // backup, encrypted with a passphrase the server never sees.
+   e2eePublicKey:{
+    type:String,
+    default:null,
+   },
+   e2eeBackup:{
+    type:{ ct:String, iv:String, salt:String, iterations:Number },
+    default:null,
+    select:false,
+   },
    tokensValidAfter:{
       type:Date,
       default:null

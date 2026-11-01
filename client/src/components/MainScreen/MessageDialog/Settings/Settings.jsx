@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { E2eeForm } from "../../E2eeSetup";
 import { useNavigate } from "react-router-dom";
 import { useCtx } from "../../AppScreen";
 import Card from "../../../ui/Card";
@@ -114,6 +115,10 @@ export default function Settings(props) {
               </button>
             ))}
           </div>
+        </Section>
+
+        <Section title="End-to-end encryption">
+          <div className="px-3 py-3"><E2eeForm /></div>
         </Section>
 
         <Section title="Notifications">

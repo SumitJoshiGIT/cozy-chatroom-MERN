@@ -1,6 +1,7 @@
 import { useState,useEffect,useRef, useCallback, useMemo} from "react";
 import Entity from "./Entity";
 import SearchBar from "./SearchBar"
+import { E2eePrompt } from "../E2eeSetup";
 import Spinner from "../../ui/Spinner";
 import { useCtx } from "../AppScreen";
 export default function (props){
@@ -13,10 +14,11 @@ export default function (props){
     return(
       <div className="flex flex-col w-full flex-1 min-h-0 mt-2">
       <SearchBar cache={props.cache} style={props.style}/>
+      {!props.style && <E2eePrompt />}
       <div className={`flex flex-col overflow-x-hidden overflow-y-scroll flex-1 min-h-0 rounded-xl ${props.style ? 'items-center mt-1' : 'mt-4'}`}>
          {showLoading ? (
            <div className="flex justify-center py-6"><Spinner /></div>
-         ) : chats.length ? chats : props.style === 0 ? (
+         ) : chats.length ? chats : !props.style ? (
            <div className="px-4 py-10 text-center animate-fade-in">
              <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent-light)] text-xl">
                ✿

@@ -10,6 +10,7 @@
   - [7. Frontend Architecture](07-frontend-architecture.md)
   - [8. Deployment](08-deployment.md)
   - [16. Audio and Video Calls](16-video-calls.md)
+  - [End-to-end encryption](17-end-to-end-encryption.md)
 
 - Interview Prep
   - [9. Overview](09-interview-prep.md)

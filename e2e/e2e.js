@@ -79,13 +79,16 @@ const reload = async (page) => { await page.reload(); await ready(page); };
   await mongoose.connect(process.env.DATABASE);
   const hash = await bcrypt.hash('Password123', 4);
   const seed = (name) => models.UsersModel.create({ name, email: `${name.toLowerCase()}@test.invalid`, password: hash });
-  const [alice, bob, carol, dave, erin] = await Promise.all(['Alice', 'Bob', 'Carol', 'Dave', 'Erin'].map(seed));
+  const [alice, bob, carol, dave, erin, frank, grace] = await Promise.all(['Alice', 'Bob', 'Carol', 'Dave', 'Erin', 'Frank', 'Grace'].map(seed));
   const history = await models.ChatsModel.create({ type: 'private', users: [carol._id, dave._id] });
   await models.UsersModel.updateMany({ _id: { $in: [carol._id, dave._id] } }, { $push: { Chats: history._id }, $addToSet: { contacts: { $each: [carol._id, dave._id] } } });
   let last;
   for (let i = 1; i <= 80; i++) last = await models.MessagesModel.create({ chat: history._id, uid: i % 2 ? carol._id : dave._id, content: `history ${String(i).padStart(3, '0')}` });
   await models.ChatsModel.findByIdAndUpdate(history._id, { lastMessage: { _id: last._id, mid: last.mid, uid: last.uid, type: 'text', content: last.content, createdAt: last.createdAt } });
   await models.ReadPositionsModel.create({ user: carol._id, chat: history._id, lastReadMid: last.mid });
+
+  const sealedRoom = await models.ChatsModel.create({ type: 'group', name: 'Sealed Room', users: [frank._id, grace._id], owner: frank._id, admins: [frank._id] });
+  await models.UsersModel.updateMany({ _id: { $in: [frank._id, grace._id] } }, { $push: { Chats: sealedRoom._id } });
 
   const browser = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
   const media = { permissions: ['geolocation', 'microphone', 'camera'], geolocation: { latitude: 28.6, longitude: 77.2 } };
@@ -430,6 +433,90 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     await b.getByRole('button', { name: 'Answer' }).waitFor({ state: 'detached' });
     await b.locator('.message-call-log', { hasText: 'Missed voice call' }).waitFor();
     await a.locator('.message-call-log', { hasText: 'Unanswered voice call' }).waitFor();
+  });
+
+  await check('end-to-end encryption: server sees ciphertext; a new device needs the passphrase', async () => {
+    const PASS = 'correct horse battery';
+    const f = await user(browser, 'frank@test.invalid', undefined, media);
+    const g = await user(browser, 'grace@test.invalid', undefined, media);
+    pages = { ...pages, f, g };
+    const turnOn = async (page) => {
+      await page.getByRole('button', { name: /Turn on encryption/ }).click();
+      await page.getByLabel('Encryption passphrase').fill(PASS);
+      await page.getByLabel('Confirm passphrase').fill(PASS);
+      await page.locator('.e2ee-prompt').getByRole('button', { name: 'Turn on encryption' }).click();
+      await page.locator('.e2ee-prompt').waitFor({ state: 'detached' });
+    };
+    await turnOn(f);
+    await turnOn(g);
+
+    await search(f, 'Grace');
+    await entity(f, 'Grace').click();
+    await send(f, 'top secret hello');
+    await entity(g, 'Frank').waitFor();
+    await clearSearch(f);
+    assert((await entity(g, 'Frank').innerText()).includes('top secret hello'), 'sidebar preview decrypts');
+    await entity(g, 'Frank').click();
+    await bubble(g, 'top secret hello').waitFor();
+    await composer(g).and(g.locator('[placeholder="Encrypted message..."]')).waitFor();
+    await send(g, 'secret reply');
+    await bubble(f, 'secret reply').waitFor();
+
+    const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    await f.locator('input[type=file]').first().setInputFiles({ name: 'private.png', mimeType: 'image/png', buffer: Buffer.from(PNG, 'base64') });
+    await composer(f).press('Enter');
+    for (const page of [f, g]) {
+      await page.waitForFunction(() => [...document.querySelectorAll('.message-media img')].some((img) => img.src.startsWith('blob:') && img.complete && img.naturalWidth > 0), null, { timeout: 15000 });
+    }
+
+    await menu(f, 'top secret hello', 'Edit');
+    await composer(f).fill('top secret edited');
+    await composer(f).press('Enter');
+    await bubble(g, 'top secret edited').waitFor();
+
+    await entity(f, 'Sealed Room').click();
+    await entity(g, 'Sealed Room').click();
+    await send(f, 'group secret');
+    await bubble(g, 'group secret').waitFor();
+    await f.getByRole('button', { name: 'Record voice message' }).click();
+    await f.waitForTimeout(1200);
+    await f.getByRole('button', { name: 'Send voice message' }).click();
+    await g.waitForFunction(() => document.querySelector('audio')?.src.startsWith('blob:'), null, { timeout: 15000 });
+    await f.locator('button:has(img[src="/attachment.svg"])').click();
+    await f.getByRole('button', { name: /Location/ }).first().click();
+    await f.getByRole('button', { name: 'Send current location' }).click();
+    await g.locator('.leaflet-container').waitFor();
+    await entity(f, 'Grace').click();
+    await entity(g, 'Frank').click();
+    await bubble(g, 'top secret edited').waitFor();
+
+    const stored = await models.MessagesModel.find({ uid: { $in: [frank._id, grace._id] } }).lean();
+    const chats = await models.ChatsModel.find({ users: frank._id }).lean();
+    assert(stored.length === 6 && stored.every((m) => m.e2ee && !m.content && !m.location), 'every message is sealed');
+    assert(!/top secret|secret reply|group secret|private\.png|image\/png|audio\/|voice-message|"lat"/.test(JSON.stringify([stored, chats])), 'plaintext reached the database');
+
+    const safety = async (page, text) => {
+      await row(page, text).locator('button').first().click();
+      return page.getByTestId('safety-number').innerText();
+    };
+    const [fromFrank, fromGrace] = [await safety(f, 'secret reply'), await safety(g, 'top secret edited')];
+    assert(fromFrank === fromGrace, 'safety numbers match');
+
+    const other = await user(browser, 'grace@test.invalid');
+    pages = { ...pages, other };
+    await entity(other, 'Frank').click();
+    await bubble(other, 'Unlock encryption to read').first().waitFor();
+    await other.getByRole('button', { name: /Unlock encrypted messages/ }).click();
+    await other.getByLabel('Encryption passphrase').fill('wrong passphrase');
+    await other.locator('.e2ee-prompt').getByRole('button', { name: 'Unlock' }).click();
+    await other.getByText('That passphrase is not correct').waitFor();
+    await other.getByLabel('Encryption passphrase').fill(PASS);
+    await other.locator('.e2ee-prompt').getByRole('button', { name: 'Unlock' }).click();
+    await bubble(other, 'top secret edited').waitFor();
+    await send(other, 'from my new device');
+    await entity(f, 'Grace').filter({ hasText: 'from my new device' }).waitFor();
+    pages = { a, b };
+    await Promise.all([f, g, other].map((page) => page.context().close()));
   });
 
   await check('reconnects after a network drop and keeps receiving', async () => {

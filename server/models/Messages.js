@@ -8,6 +8,12 @@ const Messages=new mongoose.Schema
         required:true  
     },
     content:String, 
+    // Sealed by the sender's browser. When set, content is empty and the
+    // server cannot read the text, attachment details or location inside.
+    e2ee:{
+        type:mongoose.Schema.Types.Mixed,
+        default:null,
+    },
     type:{
      type:String,
      required:true,

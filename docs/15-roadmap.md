@@ -47,7 +47,7 @@ Cross-referencing that list against [Chapter 1's feature table](./01-overview.md
 | Stories / status updates | ❌ not implemented |
 | AI smart replies / summarization | ❌ not implemented |
 | Chat-level lock / PIN | ❌ not implemented |
-| End-to-end encryption | ❌ not implemented (server can read message content) |
+| End-to-end encryption | ✅ opt-in, see [17-end-to-end-encryption.md](17-end-to-end-encryption.md) |
 | Communities / broadcast channels | ❌ not implemented (groups only) |
 | Push notifications (tab closed) | ✅ Web Push (needs VAPID keys) |
 | Voice messages | ❌ not implemented |

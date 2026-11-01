@@ -31,7 +31,7 @@ const docTypes = [
 ];
 const acceptedTypes = [...imageTypes, ...videoTypes, ...audioTypes, ...docTypes];
 const MessageBar = React.memo((props) => {
-  const { setMessages, db, scrollable, userID, chatID, socket, emitTyping, chatdata, blocked, toggleBlock, drafts, setDraft }=useCtx();
+  const { setMessages, db, scrollable, userID, chatID, socket, emitTyping, chatdata, blocked, toggleBlock, drafts, setDraft, e2ee, e2eeStatus, recipientsOf, sealFields, sendSealed }=useCtx();
   const toast=useToast();
   const chat = chatdata[chatID.id] || {};
   const blockedOther = chat.type !== 'group' && chat.sender && blocked.has(chat.sender);
@@ -66,7 +66,36 @@ const MessageBar = React.memo((props) => {
     setLiveLocationChat(null);
   }
 
-  function sendLocation({ lat, lng, live, durationMs }) {
+  // "sealed" is true, false or null while unknown, and only drives what the
+  // composer says. sendSealed makes its own decision for every message.
+  const [sealed, setSealed] = useState(null);
+  useEffect(() => {
+    let active = true;
+    setSealed(null);
+    if (e2ee.current && e2eeStatus === "ready") {
+      e2ee.current.willEncrypt(recipientsOf(chatID.id, chatID.type)).then((value) => active && setSealed(value), () => {});
+    }
+    return () => { active = false; };
+  }, [chatID.id, chatID.type, e2eeStatus, (chat.users || []).length]);
+
+  async function sendLocation({ lat, lng, live, durationMs }) {
+    if (e2eeStatus === "locked") {
+      toast.error("Unlock encryption to send messages.");
+      return;
+    }
+    const encrypted = e2ee.current ? await e2ee.current.willEncrypt(recipientsOf(chatID.id, chatID.type)).catch(() => null) : false;
+    if (encrypted === null) {
+      toast.error("This chat's encryption could not be checked. Location not sent.");
+      return;
+    }
+    if (encrypted) {
+      if (live) {
+        toast.error("Live location isn't available in encrypted chats. Share your current location instead.");
+        return;
+      }
+      sendSealed({ event: "sendMessage", cid: chatID.id, type: chatID.type, location: { lat, lng, live: false } });
+      return;
+    }
     socket.current.emit("sendLocation", { cid: chatID.id, lat, lng, live, durationMs }, (res) => {
       if (!res || !res._id || !live) return;
       clearLiveLocation();
@@ -109,17 +138,27 @@ const MessageBar = React.memo((props) => {
     if (props.edit) setMessage(props.edit[0].content || "");
   }, [props.edit]);
 
-  function saveEdit(event) {
+  async function saveEdit(event) {
     event.preventDefault();
     if (!message.trim()) return;
     const target = props.edit[0];
-    socket.current.emit("editMessage", {
-      id: target._id,
-      cid: chatID.id,
-      content: message,
-    });
+    const content = message;
     setMessage("");
     props.setEdit();
+    if (!target.encrypted) {
+      socket.current.emit("editMessage", { id: target._id, cid: chatID.id, content });
+      return;
+    }
+    try {
+      const keptFiles = (target.attachments || []).map((a) => ({
+        ...a.sealedWith, name: a.name, type: a.contentType, size: a.size,
+      }));
+      const fields = await sealFields(chatID.id, chatID.type, { content, keptFiles });
+      if (!fields.e2ee) throw new Error("This message can't be edited, because someone in the chat no longer has a key.");
+      socket.current.emit("editMessage", { id: target._id, cid: chatID.id, e2ee: fields.e2ee });
+    } catch (err) {
+      toast.error(err.message);
+    }
   }
 
   async function SendMessage(event) {
@@ -157,17 +196,15 @@ const MessageBar = React.memo((props) => {
     clearTimeout(draftDebounce.current);
     setDraft(chatID.id, "");
 
-    const eventName = chatID.type === "user" ? "createChatPrivate" : "sendMessage";
-    socket.current.emit(
-      eventName,
-      {
-        cid: chatID.id,
-        content: msg.content,
-        replace: msg._id,
-        reply_to: msg.reply_to,
-        attachments: msg.attachments,
-      }
-    );
+    sendSealed({
+      event: chatID.type === "user" ? "createChatPrivate" : "sendMessage",
+      type: chatID.type,
+      cid: chatID.id,
+      content: msg.content,
+      replace: msg._id,
+      reply_to: msg.reply_to,
+      attachments: msg.attachments,
+    });
 
     if (props.reply) props.setReply();
     if (scrollable.current) scrollable.current.scrollTo(0, scrollable.current.scrollHeight);
@@ -198,16 +235,15 @@ const MessageBar = React.memo((props) => {
       obj[chatID.id] = { ...(obj[chatID.id] || {}), ...{ [msg._id]: msg } };
       return obj;
     });
-    socket.current.emit(
-      chatID.type === "user" ? "createChatPrivate" : "sendMessage",
-      {
-        cid: chatID.id,
-        content: "",
-        replace: msg._id,
-        reply_to: null,
-        attachments: msg.attachments,
-      }
-    );
+    sendSealed({
+      event: chatID.type === "user" ? "createChatPrivate" : "sendMessage",
+      type: chatID.type,
+      cid: chatID.id,
+      content: "",
+      replace: msg._id,
+      reply_to: null,
+      attachments: msg.attachments,
+    });
     if (scrollable.current) scrollable.current.scrollTo(0, scrollable.current.scrollHeight);
   }
 
@@ -455,7 +491,7 @@ const MessageBar = React.memo((props) => {
             }}
             aria-label="Message"
             className="pt-2 pb-1.5 align-bottom bg-transparent text-sm max-h-36 w-full outline-none border-none min-h-9 h-auto text-gray-700 dark:text-gray-100 resize-none placeholder-gray-400 dark:placeholder-gray-500"
-            placeholder="Write your message..."
+            placeholder={sealed ? "Encrypted message..." : sealed === false ? "Not encrypted: someone here has no key..." : "Write your message..."}
             type="text"
             onChange={(event) => {
               setMessage(() => event.target.value);

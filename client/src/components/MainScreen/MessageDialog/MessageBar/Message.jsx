@@ -1,5 +1,6 @@
 import React, { Suspense, lazy } from "react";
 import { createPortal } from "react-dom";
+import { useDecryptedAttachments } from "../../../../e2ee/attachments";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useCtx } from "../../AppScreen";
 import { attachmentUrl } from "../../../../attachmentUrl";
@@ -49,7 +50,8 @@ const fileBadge = (contentType, name) =>
   };
 
 export default function (props) {
-  const { profiles, db, userID, chatID, socket, starred, toggleStar, chatdata, pinMessage, unpinMessage, reactMessage, report, requestProfile, mediaToken } = useCtx();
+  const { profiles, db, userID, chatID, socket, starred, toggleStar, chatdata, pinMessage, unpinMessage, reactMessage, report, requestProfile, mediaToken, sendSealed } = useCtx();
+  useDecryptedAttachments(props.item.attachments, mediaToken);
   const [viewer, setViewer] = useState(null);
   const contextref = useRef();
   const [showReactions, setShowReactions] = useState(false);
@@ -78,18 +80,19 @@ export default function (props) {
     : null;
   const repliedProfile = repliedMessage ? profiles[repliedMessage.uid] || {} : {};
 
+  const resend = () => sendSealed({
+    event: chatID.type === "user" ? "createChatPrivate" : "sendMessage",
+    type: chatID.type,
+    cid: messageItem.chat,
+    content: messageItem.content,
+    replace: messageItem._id,
+    reply_to: messageItem.reply_to,
+    attachments: messageItem.attachments,
+  });
+
   useEffect(() => {
     if (messageItem.status == "⧖" && !messageItem.sendQueued) {
-      socket.current.emit(
-        chatID.type == "user" ? "createChatPrivate" : "sendMessage",
-        {
-          cid: messageItem.chat,
-          content: messageItem.content,
-          replace: messageItem._id,
-          reply_to: messageItem.reply_to,
-          attachments: messageItem.attachments,
-        }
-      );
+      resend();
     }
   }, []);
   useEffect(() => {
@@ -186,7 +189,7 @@ export default function (props) {
     closeMenu();
   };
   const myReaction = (messageItem.reactions||[]).find(r => (r.users||[]).includes(userID.current));
-  const canEdit = flag && messageItem.content && Date.now() - time.getTime() <= EDIT_WINDOW_MS;
+  const canEdit = flag && messageItem.content && !messageItem.locked && !messageItem.unreadable && Date.now() - time.getTime() <= EDIT_WINDOW_MS;
   const isChatAdmin = chat.type === 'group' && ((chat.admins||[]).includes(userID.current) || chat.owner === userID.current);
   const canDelete = flag || isChatAdmin;
   const longPressTimer = useRef(null);
@@ -334,6 +337,7 @@ export default function (props) {
                   {isPinned && <span title="Pinned">📌</span>}
                   {isStarred && <span className="text-amber-500">★</span>}
                   {messageItem.edited && <span className="italic">edited</span>}
+                  {messageItem.encrypted && <span role="img" aria-label="Encrypted" className="mr-0.5">🔒</span>}
                   {pad(time.getHours())}:{pad(time.getMinutes())}
                   {flag && (messageItem.status === "⧖" ? (
                     <Spinner size="xs" className="align-middle" />
@@ -343,16 +347,7 @@ export default function (props) {
                         type="button"
                         title={messageItem.sendError || "Message failed. Retry"}
                         aria-label="Retry sending message"
-                        onClick={() => socket.current.emit(
-                          chatID.type === "user" ? "createChatPrivate" : "sendMessage",
-                          {
-                            cid: messageItem.chat,
-                            content: messageItem.content,
-                            replace: messageItem._id,
-                            reply_to: messageItem.reply_to,
-                            attachments: messageItem.attachments,
-                          }
-                        )}
+                        onClick={resend}
                         className="message-retry font-bold underline decoration-dotted underline-offset-2"
                       >
                         Retry

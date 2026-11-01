@@ -81,6 +81,7 @@ const Chats=new mongoose.Schema
         uid:mongoose.Schema.Types.ObjectId,
         type:String,
         content:String,
+        e2ee:mongoose.Schema.Types.Mixed,
         // Just enough to render the sidebar preview (📷/🎥/🎤/📍 labels)
         // without ever loading the full message/attachment list.
         attachmentType:String,

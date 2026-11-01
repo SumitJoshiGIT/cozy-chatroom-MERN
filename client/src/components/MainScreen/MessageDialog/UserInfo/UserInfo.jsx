@@ -25,6 +25,16 @@ export default function (props){
     const [reportReason, setReportReason] = useState("");
     const [reportSent, setReportSent] = useState(false);
     const isBlocked = blocked && blocked.has(currentId);
+    const { e2ee, e2eeStatus } = useCtx();
+    const [safetyNumber, setSafetyNumber] = useState(null);
+    useEffect(() => {
+      let active = true;
+      setSafetyNumber(null);
+      if (currentId !== userID.current && e2ee.current && e2eeStatus === "ready") {
+        e2ee.current.safetyNumberWith(currentId).then((value) => active && setSafetyNumber(value), () => {});
+      }
+      return () => { active = false; };
+    }, [currentId, e2eeStatus]);
 
   useEffect(() => {
     setAbout(profile.about || "");
@@ -131,6 +141,13 @@ export default function (props){
               </Button>
             )}
           </div>
+          {safetyNumber && (
+            <div className="px-1 py-2">
+              <div className="text-sm font-semibold">🔒 Safety number</div>
+              <p className="text-xs text-gray-500">If this matches on their screen, nobody is intercepting your messages.</p>
+              <code data-testid="safety-number" className="mt-1 block text-xs">{safetyNumber}</code>
+            </div>
+          )}
           {reporting && (
             <div className="flex flex-col gap-2 max-w-md">
               <TextArea

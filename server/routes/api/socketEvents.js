@@ -110,15 +110,33 @@ function consumeUploadQuota(uid, bytes) {
   return true;
 }
 
-async function saveUpload(base64, mimeType, name, uid, extraTypes, isAttachment = false) {
+const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+const isBase64 = (value, max) => typeof value === "string" && value.length > 0 && value.length <= max && BASE64_RE.test(value);
+const MAX_E2EE_RECIPIENTS = 1024;
+const MAX_E2EE_TEXT = 256 * 1024;
+
+// The server can't read an envelope, but it can refuse junk and bound its size.
+function isEnvelope(value) {
+  if (!value || typeof value !== "object" || value.v !== 1) return false;
+  if (!isBase64(value.spk, 128) || !isBase64(value.iv, 32) || !isBase64(value.ct, MAX_E2EE_TEXT)) return false;
+  const entries = value.keys && typeof value.keys === "object" ? Object.entries(value.keys) : [];
+  if (!entries.length || entries.length > MAX_E2EE_RECIPIENTS) return false;
+  return entries.every(([uid, entry]) => isId(uid) && entry && isBase64(entry.iv, 32) && isBase64(entry.k, 128));
+}
+
+const isKeyBackup = (value) => !!value && isBase64(value.ct, 1024) && isBase64(value.iv, 32) && isBase64(value.salt, 64)
+  && Number.isInteger(value.iterations) && value.iterations >= 100000 && value.iterations <= 10000000;
+
+// Sealed files are opaque by design, so there is no type or signature to check.
+async function saveUpload(base64, mimeType, name, uid, extraTypes, isAttachment = false, sealed = false) {
   const allowList = extraTypes ? { ...allowedTypes, ...extraTypes } : allowedTypes;
-  const normalizedType = (typeof mimeType === "string" ? mimeType : "").split(';')[0].trim();
-  if (typeof base64 !== "string" || !base64 || !allowList[normalizedType]) return null;
+  const normalizedType = sealed ? "application/octet-stream" : (typeof mimeType === "string" ? mimeType : "").split(';')[0].trim();
+  if (typeof base64 !== "string" || !base64 || !(sealed || allowList[normalizedType])) return null;
   const buffer = Buffer.from(base64, 'base64');
   if (!buffer.length || buffer.length > maxUploadSize) return null;
-  if (!matchesSignature(buffer, normalizedType)) return null;
+  if (!sealed && !matchesSignature(buffer, normalizedType)) return null;
   if (!consumeUploadQuota(uid, buffer.length)) return null;
-  const file = `${crypto.randomBytes(16).toString("hex")}.${allowList[normalizedType]}`;
+  const file = `${crypto.randomBytes(16).toString("hex")}.${sealed ? "bin" : allowList[normalizedType]}`;
   const dir = isAttachment ? ATTACHMENT_DIR : UPLOAD_DIR;
   const src = isAttachment ? `${ATTACHMENT_PREFIX}${file}` : file;
   try {
@@ -130,7 +148,7 @@ async function saveUpload(base64, mimeType, name, uid, extraTypes, isAttachment 
     console.error("saveUpload: failed to write file", err);
     return null;
   }
-  return { src, name: cleanText(name, 255) || "file", size: buffer.length, contentType: normalizedType };
+  return { src, name: sealed ? "encrypted" : cleanText(name, 255) || "file", size: buffer.length, contentType: normalizedType };
 }
 
 // Denormalized onto Chats so the sync manifest can tell a chat changed
@@ -145,6 +163,7 @@ function lastMessageSnapshot(message) {
     uid: message.uid,
     type: message.type,
     content: message.content,
+    e2ee: message.e2ee || undefined,
     attachmentType: firstAttachment ? firstAttachment.contentType : undefined,
     attachmentName: firstAttachment ? firstAttachment.name : undefined,
     liveLocation: message.location ? !!message.location.live : undefined,
@@ -348,7 +367,8 @@ function onConnection(socket, io) {
     if (!recipients.length) return;
     const senderName = profile.name || profile.username;
     const title = chat.type === "group" && chat.name ? `${senderName} (${chat.name})` : senderName;
-    const body = message.type === "location" ? "Shared a location"
+    const body = message.e2ee ? "New encrypted message"
+      : message.type === "location" ? "Shared a location"
       : message.content ? message.content.slice(0, 200)
       : (message.attachments && message.attachments.length) ? "Sent an attachment"
       : "New message";
@@ -386,6 +406,11 @@ function onConnection(socket, io) {
       return;
     }
     const replace = message.replace;
+    const sealed = message.e2ee ? message.e2ee : null;
+    if (sealed && !isEnvelope(sealed)) {
+      socket.emit("messageError", { event: "sendMessage", replace, message: "That encrypted message was not valid." });
+      return;
+    }
     if (typeof message.content === "string" && message.content.length > MAX_MESSAGE_LENGTH) {
       socket.emit("messageError", { event: "sendMessage", replace, message: "That message is too long." });
       return;
@@ -406,18 +431,20 @@ function onConnection(socket, io) {
     if (Array.isArray(message.attachments)) {
       for (const attachment of message.attachments.slice(0, 10)) {
         if (!attachment) continue;
-        const saved = await saveUpload(attachment.file, attachment.type, attachment.name, selfId, { ...allowedDocTypes, ...allowedAudioTypes, ...allowedVideoTypes }, true);
+        const saved = await saveUpload(attachment.file, attachment.type, attachment.name, selfId, { ...allowedDocTypes, ...allowedAudioTypes, ...allowedVideoTypes }, true, !!sealed);
         if (saved) attachments.push(saved);
       }
     }
-    const content = cleanText(message.content, MAX_MESSAGE_LENGTH);
-    if (!content.trim() && !attachments.length) {
+    // Sealed messages keep nothing readable, even if a client sends both.
+    const content = sealed ? "" : cleanText(message.content, MAX_MESSAGE_LENGTH);
+    if (!sealed && !content.trim() && !attachments.length) {
       socket.emit("messageError", { event: "sendMessage", replace, message: "That attachment couldn't be sent. Check its type and size." });
       return;
     }
     const newMessage = new models.MessagesModel({
       chat: message.cid,
       content,
+      e2ee: sealed,
       uid: profile._id,
       reply_to: replyTo,
       status: "✔",
@@ -773,6 +800,29 @@ function onConnection(socket, io) {
     }, CALL_RECONNECT_GRACE_MS);
   });
 
+  socket.on("e2eeSetKey", async ({ publicKey, backup } = {}, ack) => {
+    const reply = typeof ack === "function" ? ack : () => {};
+    if (!isBase64(publicKey, 128) || !isKeyBackup(backup)) return reply({ ok: false });
+    const { ct, iv, salt, iterations } = backup;
+    await models.UsersModel.findByIdAndUpdate(profile._id, { e2eePublicKey: publicKey, e2eeBackup: { ct, iv, salt, iterations } });
+    profile.e2eePublicKey = publicKey;
+    socket.to(userRoom(selfId)).emit("e2eeKeyChanged", { publicKey });
+    reply({ ok: true });
+  });
+
+  socket.on("e2eeGetBackup", async (_, ack) => {
+    if (typeof ack !== "function") return;
+    const user = await models.UsersModel.findById(profile._id, "e2eePublicKey +e2eeBackup");
+    ack({ publicKey: user?.e2eePublicKey || null, backup: user?.e2eeBackup || null });
+  });
+
+  socket.on("e2eeKeys", async ({ uids } = {}, ack) => {
+    if (typeof ack !== "function" || !Array.isArray(uids)) return;
+    const ids = uids.filter(isId).slice(0, MAX_E2EE_RECIPIENTS);
+    const users = await models.UsersModel.find({ _id: { $in: ids } }, "e2eePublicKey");
+    ack(Object.fromEntries(users.map((u) => [String(u._id), u.e2eePublicKey || null])));
+  });
+
   socket.on("blockUser", async ({ id } = {}) => {
     if (!isId(id) || id === selfId) return;
     await updateSelf({ $addToSet: { blocked: id } });
@@ -868,9 +918,10 @@ function onConnection(socket, io) {
     io.to(cid).emit("deleteMessage", [id, message.mid, cid]);
   });
 
-  socket.on("editMessage", async ({ id, cid, content } = {}) => {
-    if (!inChat(cid) || !isId(id) || typeof content !== "string" || !content.trim()) return;
-    if (content.length > MAX_MESSAGE_LENGTH) {
+  socket.on("editMessage", async ({ id, cid, content, e2ee } = {}) => {
+    if (!inChat(cid) || !isId(id)) return;
+    if (e2ee ? !isEnvelope(e2ee) : typeof content !== "string" || !content.trim()) return;
+    if (!e2ee && content.length > MAX_MESSAGE_LENGTH) {
       socket.emit("messageError", { event: "editMessage", message: "That message is too long." });
       return;
     }
@@ -881,14 +932,15 @@ function onConnection(socket, io) {
       socket.emit("messageError", { event: "editMessage", message: "Messages can only be edited for 15 minutes." });
       return;
     }
-    message.content = cleanText(content, MAX_MESSAGE_LENGTH);
+    message.content = e2ee ? "" : cleanText(content, MAX_MESSAGE_LENGTH);
+    message.e2ee = e2ee || null;
     message.edited = true;
     await message.save();
     const chat = await models.ChatsModel.findById(cid, "lastMessage");
     if (chat && chat.lastMessage && sameId(chat.lastMessage._id, message._id)) {
       await updateLastMessage(cid, message);
     }
-    io.to(cid).emit("editMessage", { id: message._id, mid: message.mid, cid, content: message.content, edited: true });
+    io.to(cid).emit("editMessage", { id: message._id, mid: message.mid, cid, uid: message.uid, content: message.content, e2ee: message.e2ee, edited: true });
   });
 
   socket.on("toggleStar", async ({ id } = {}) => {
@@ -1258,9 +1310,10 @@ function onConnection(socket, io) {
         io.to(userRoom(user._id)).emit("chat", { type: "chats", chats: [data] });
       }
       // A file-only first message has falsy content, so check attachments too.
-      if (stream.content || (Array.isArray(stream.attachments) && stream.attachments.length)) {
+      if (stream.content || stream.e2ee || (Array.isArray(stream.attachments) && stream.attachments.length)) {
         await SendMessage({
           content: stream.content,
+          e2ee: stream.e2ee,
           cid,
           reply_to: stream.reply_to,
           attachments: stream.attachments,

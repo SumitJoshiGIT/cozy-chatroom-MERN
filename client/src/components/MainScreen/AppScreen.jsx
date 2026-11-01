@@ -17,6 +17,7 @@ import { captureAuthTokenFromUrl, captureInviteFromUrl, clearStoredAuthToken, ge
 import { useToast } from "../ui/Toast";
 import { readAllDrafts, persistDrafts } from "../../drafts";
 import { clearLocalData } from "../../session";
+import { createE2ee, LOCKED_TEXT } from "../../e2ee/engine";
 const CallOverlay = lazy(() => import("./CallOverlay"));
 // Tokens last 12 hours; replacing them at 6 keeps a long-lived tab covered.
 const MEDIA_TOKEN_REFRESH_MS = 6 * 60 * 60 * 1000;
@@ -86,7 +87,56 @@ function ChatScreen(props) {
   const privateChats = useRef({});
   const scrollable = useRef(null);
   const socket = useRef(null);
+  const markSendFailed = useCallback((replace, message) => {
+    toast.error(message || "Your message could not be sent. Please try again.");
+    setMessages((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((cid) => {
+        if (next[cid]?.[replace]) {
+          next[cid] = {
+            ...next[cid],
+            [replace]: { ...next[cid][replace], status: "!", sendError: message },
+          };
+        }
+      });
+      return next;
+    });
+  }, []);
   const pendingAuth = useRef({ received: false, data: null });
+  const e2ee = useRef(null);
+  const [e2eeStatus, setE2eeStatus] = useState("loading");
+  const e2eeReady = useRef(null);
+  if (!e2eeReady.current) {
+    let resolve;
+    e2eeReady.current = new Promise((done) => { resolve = done; });
+    e2eeReady.current.resolve = resolve;
+  }
+  const openMessage = useCallback((message) => {
+    if (e2ee.current) return e2ee.current.openMessage(message);
+    return message?.e2ee ? { ...message, encrypted: true, locked: true, content: LOCKED_TEXT } : message;
+  }, []);
+  const openPreview = useCallback((last) => {
+    if (e2ee.current) return e2ee.current.openPreview(last);
+    return last?.e2ee ? { ...last, locked: true, content: LOCKED_TEXT } : last;
+  }, []);
+  const recipientsOf = useCallback((cid, type) => (
+    type === "user"
+      ? [userID.current, cid]
+      : (chatCache.current.chats[cid]?.users || []).map(String)
+  ), []);
+  const sealFields = useCallback(async (cid, type, fields) => {
+    await e2eeReady.current;
+    return e2ee.current.enqueue(() => e2ee.current.prepare(recipientsOf(cid, type), fields));
+  }, [recipientsOf]);
+  // Every outgoing message goes through here, so nothing can skip encryption.
+  const sendSealed = useCallback(async ({ event, cid, type, replace, reply_to, ...fields }) => {
+    try {
+      const sealed = await sealFields(cid, type, fields);
+      socket.current.emit(event, { cid, replace, reply_to, ...sealed });
+    } catch (err) {
+      markSendFailed(replace, err.message);
+    }
+  }, [sealFields, markSendFailed]);
   const requestProfile = useCallback((uid) => {
     if (!uid || requestedProfiles.current.has(String(uid))) return;
     requestedProfiles.current.add(String(uid));
@@ -149,19 +199,10 @@ function ChatScreen(props) {
     });
     socket.current.on("messageError", ({ event, replace, message }) => {
       console.error("[chat] message failed", { event, replace, message });
-      toast.error(message || "Your message could not be sent. Please try again.");
-      setMessages((prev) => {
-        const next = { ...prev };
-        Object.keys(next).forEach((cid) => {
-          if (next[cid]?.[replace]) {
-            next[cid] = {
-              ...next[cid],
-              [replace]: { ...next[cid][replace], status: "!", sendError: message },
-            };
-          }
-        });
-        return next;
-      });
+      markSendFailed(replace, message);
+    });
+    socket.current.on("e2eeKeyChanged", ({ publicKey }) => {
+      if (e2ee.current) e2ee.current.load(publicKey);
     });
     socket.current.on("connect_error", () => {
       if (offlineNotified.current) return;
@@ -297,6 +338,7 @@ function ChatScreen(props) {
             chatCache.current["chats"] = store;
 
             socket.current.on(`messages`, async (stream) => {
+              if (stream.data) stream.data = await Promise.all(stream.data.map(openMessage));
               // Only a real fetch proves the history is here. A lone live
               // message must not mark the chat loaded, or opening it later
               // would show that one message and never fetch the rest.
@@ -411,12 +453,20 @@ function ChatScreen(props) {
                 .delete(id);
             });
 
-            socket.current.on("editMessage", ({ id, mid, cid, content, edited }) => {
+            socket.current.on("editMessage", async ({ mid, cid, content, edited, e2ee: envelope, uid }) => {
+              const opened = await openMessage({ uid, content, e2ee: envelope, attachments: [] });
               setMessages((prev) => {
                 const store = { ...(prev || {}) };
                 const chatStore = { ...(store[cid] || {}) };
                 if (chatStore[mid]) {
-                  const updated = { ...chatStore[mid], content, edited };
+                  const updated = {
+                    ...chatStore[mid],
+                    content: opened.content,
+                    e2ee: envelope,
+                    edited,
+                    locked: !!opened.locked,
+                    unreadable: !!opened.unreadable,
+                  };
                   chatStore[mid] = updated;
                   db.transaction("messages", "readwrite").objectStore("messages").put(updated);
                 }
@@ -431,8 +481,8 @@ function ChatScreen(props) {
               setStarredMessages((prev) => prev.filter((m) => idSet.has(m._id)));
             });
 
-            socket.current.on("starredMessages", (data) => {
-              setStarredMessages(data);
+            socket.current.on("starredMessages", async (data) => {
+              setStarredMessages(await Promise.all(data.map(openMessage)));
             });
 
             socket.current.on("blocked", (ids) => {
@@ -550,6 +600,7 @@ function ChatScreen(props) {
                   try {
                     // See the "profile" handler above for why this needs cache-busting and the already-prefixed guard.
                     if (data.img && !data.img.src.startsWith(apiOrigin)) data.img.src = `${apiOrigin}/${data.img.src}?t=${new Date(data.updatedAt).getTime()}`;
+                    if (data.lastMessage) data.lastMessage = await openPreview(data.lastMessage);
                     // A pushed chat doc has neither the sidebar's profile-derived
                     // fields nor the local unread count, so merge over the cache.
                     const cached = chatCache.current.chats[data._id];
@@ -733,6 +784,18 @@ function ChatScreen(props) {
         }
         user = { ...user, ...data };
         if (data) {
+          if (!e2ee.current) {
+            e2ee.current = createE2ee({
+              socket,
+              userId: String(data._id),
+              onStatus: setE2eeStatus,
+              onKeyChange: (uid) => {
+                const name = profilesRef.current[uid]?.name || "A contact";
+                toast.error(`${name}'s encryption key changed. Compare safety numbers if this is unexpected.`);
+              },
+            });
+          }
+          e2ee.current.load(data.e2eePublicKey || null).finally(() => e2eeReady.current.resolve());
           // A valid new account can have no chats yet. Mark the initial
           // loading phase complete immediately so an empty account renders an
           // empty state instead of an endless spinner while sync finishes.
@@ -772,9 +835,42 @@ function ChatScreen(props) {
     }
   }, [db]);
 
+  // Messages that arrived before the key was available are opened once it is.
+  const reopening = useRef(new Set());
+  useEffect(() => {
+    if (e2eeStatus !== "ready" || !db) return;
+    Object.entries(Messages).forEach(([cid, store]) => {
+      Object.values(store || {}).filter((m) => m.locked && !reopening.current.has(m._id)).forEach(async (message) => {
+        reopening.current.add(message._id);
+        const opened = await e2ee.current.openMessage(message);
+        reopening.current.delete(message._id);
+        db.transaction("messages", "readwrite").objectStore("messages").put(opened);
+        setMessages((prev) => ({ ...prev, [cid]: { ...(prev[cid] || {}), [opened.mid]: opened } }));
+      });
+    });
+  }, [e2eeStatus, Messages, db]);
+  useEffect(() => {
+    if (e2eeStatus !== "ready" || !db) return;
+    Object.values(chatdata).filter((chat) => chat?.lastMessage?.locked && !reopening.current.has(chat._id)).forEach(async (chat) => {
+      reopening.current.add(chat._id);
+      const lastMessage = await e2ee.current.openPreview(chat.lastMessage);
+      reopening.current.delete(chat._id);
+      const updated = { ...chatCache.current.chats[chat._id], lastMessage };
+      chatCache.current.chats = { ...chatCache.current.chats, [chat._id]: updated };
+      setChatdata(chatCache.current.chats);
+      db.transaction("chats", "readwrite").objectStore("chats").put(updated);
+    });
+  }, [e2eeStatus, chatdata, db]);
+
   return (
     <Context.Provider
       value={{
+        e2ee,
+        e2eeStatus,
+        openMessage,
+        recipientsOf,
+        sealFields,
+        sendSealed,
         userID,
         profiles,
         socket,

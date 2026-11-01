@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import placeholder from '/files.svg'
 import { useCtx } from '../../AppScreen'
 import { attachmentUrl } from '../../../../attachmentUrl'
+import { useDecryptedAttachments } from '../../../../e2ee/attachments'
 
 export default function Media(props){
     const { Messages, mediaToken } = useCtx();
@@ -14,6 +15,8 @@ export default function Media(props){
       });
       return out.reverse();
     }, [Messages, props.chat._id]);
+
+    useDecryptedAttachments(items, mediaToken);
 
     if (items.length === 0) {
       return <div className='flex h-full justify-center flex-1'>
