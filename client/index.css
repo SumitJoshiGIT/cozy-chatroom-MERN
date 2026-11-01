@@ -1275,6 +1275,20 @@ button:focus-visible,
   pointer-events: auto;
 }
 
+/* The trigger sits outside the bubble, so without this the pointer leaves
+   .group while crossing the gap and the trigger hides before it can be reached. */
+.message-row .group::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 2.5rem;
+  height: max(100%, 2.5rem);
+  transform: translateY(-50%);
+}
+
+.message-row-in .group::after { left: 100%; }
+.message-row-out .group::after { right: 100%; }
+
 .group:hover .message-reaction-trigger,
 .message-reaction-trigger:hover,
 .message-reaction-trigger:focus-visible,

@@ -184,8 +184,14 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     await menu(b, 'rapid one', 'Reply');
     await send(b, 'replying now');
     await row(a, 'replying now').getByText('rapid one').waitFor();
+    // Step the mouse across: a direct click would skip the gap beside the bubble.
     await bubble(b, 'rapid two').hover();
-    await row(b, 'rapid two').getByRole('button', { name: 'React to message' }).click();
+    const reactTrigger = row(b, 'rapid two').getByRole('button', { name: 'React to message' });
+    const box = await reactTrigger.boundingBox();
+    await b.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 25 });
+    await b.waitForTimeout(250);
+    if (!(await reactTrigger.isVisible())) throw new Error('reaction trigger hid while moving to it');
+    await b.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await row(b, 'rapid two').locator('.message-reaction-picker').getByText('👍').click();
     await row(a, 'rapid two').locator('.message-reaction-chip').waitFor();
     await menu(a, 'rapid two', 'Edit');
