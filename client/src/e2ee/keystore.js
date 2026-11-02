@@ -1,5 +1,5 @@
-// Device-only storage, separate from the message cache. The private key is a
-// non-extractable CryptoKey, so page scripts can use it but never read it.
+// Device-only storage, separate from the message cache. It survives logout:
+// without a passphrase, this may be the only copy of the account's key.
 const DB_NAME = "LavenderKeys";
 
 function openStore() {
@@ -32,10 +32,3 @@ export const loadIdentity = (uid) => run("identity", "readonly", (store) => stor
 export const saveIdentity = (uid, identity) => run("identity", "readwrite", (store) => store.put(identity, uid));
 export const loadPin = (uid) => run("pins", "readonly", (store) => store.get(uid));
 export const savePin = (uid, pin) => run("pins", "readwrite", (store) => store.put(pin, uid));
-
-export function clearKeyStore() {
-  return new Promise((resolve) => {
-    const request = indexedDB.deleteDatabase(DB_NAME);
-    request.onsuccess = request.onerror = request.onblocked = () => resolve();
-  });
-}

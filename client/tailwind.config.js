@@ -5,8 +5,16 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['DM Sans', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
         display: ['Pacifico', 'cursive'],
+      },
+      colors: {
+        ink: { DEFAULT: 'var(--text)', muted: 'var(--text-muted)' },
+        surface: { DEFAULT: 'var(--surface)', muted: 'var(--surface-muted)', raised: 'var(--surface-raised)' },
+        line: 'var(--border)',
+        accent: { DEFAULT: 'var(--accent)', dark: 'var(--accent-dark)', soft: 'var(--accent-light)' },
+        danger: { DEFAULT: 'var(--danger)', soft: 'var(--danger-soft)' },
+        success: { DEFAULT: 'var(--success)', soft: 'var(--success-soft)' },
       },
       keyframes: {
         'toast-in': {

@@ -18,9 +18,13 @@ const STEPS = [
     body: "Create a group chat, then invite people with a link.",
   },
   {
-    target: ".e2ee-prompt",
-    title: "Keep your messages private",
-    body: "Turn on encryption so only the people in your chats can read them.",
+    title: "Your messages stay private",
+    body: "Chats are end-to-end encrypted automatically, so only the people in them can read them. On a new device, approve it from one you've used before.",
+  },
+  {
+    target: '[data-tour="missed-calls"]',
+    title: "Never miss a call",
+    body: "Calls you missed appear here, ready to call back.",
   },
   {
     target: '[data-tour="settings"]',

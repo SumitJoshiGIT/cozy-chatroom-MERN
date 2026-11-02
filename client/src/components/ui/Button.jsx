@@ -4,8 +4,8 @@ const variants = {
   primary: 'text-white bg-[var(--accent)] hover:bg-[var(--accent-dark)] shadow-[0_2px_8px_-2px_var(--accent)]',
   dark: 'bg-gray-900 text-white hover:bg-black',
   google: 'bg-blue-400 text-white hover:bg-blue-500',
-  danger: 'bg-red-50 text-red-600 hover:bg-red-100',
-  dangerSolid: 'bg-red-500 text-white hover:bg-red-600',
+  danger: 'bg-danger-soft text-danger hover:bg-danger-soft',
+  dangerSolid: 'bg-danger text-white hover:bg-danger',
   ghost: 'bg-[var(--surface-muted)] text-[var(--text-muted)] hover:bg-[var(--accent-light)] hover:text-[var(--text)]',
 };
 

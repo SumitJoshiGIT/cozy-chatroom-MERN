@@ -18,6 +18,7 @@ import { useToast } from "../ui/Toast";
 import { readAllDrafts, persistDrafts } from "../../drafts";
 import { clearLocalData } from "../../session";
 import { createE2ee, LOCKED_TEXT } from "../../e2ee/engine";
+import { E2eeLinkDialog } from "./E2eeSetup";
 const CallOverlay = lazy(() => import("./CallOverlay"));
 const Tutorial = lazy(() => import("./Tutorial"));
 // Tokens last 12 hours; replacing them at 6 keeps a long-lived tab covered.
@@ -107,6 +108,32 @@ function ChatScreen(props) {
   const e2ee = useRef(null);
   const [e2eeStatus, setE2eeStatus] = useState("loading");
   const [showTutorial, setShowTutorial] = useState(false);
+  const [missedCalls, setMissedCalls] = useState([]);
+  const [missedCallsSeen, setMissedCallsSeen] = useState(0);
+  const seenKey = () => `lavender-missed-seen-${userID.current}`;
+  const loadMissedCalls = useCallback(() => {
+    socket.current.timeout(8000).emit("missedCalls", {}, (err, calls) => {
+      if (err) return;
+      setMissedCalls(calls);
+      try { setMissedCallsSeen(Number(localStorage.getItem(seenKey())) || 0); } catch {}
+    });
+  }, []);
+  const markMissedCallsSeen = useCallback(() => {
+    const now = Date.now();
+    setMissedCallsSeen(now);
+    try { localStorage.setItem(seenKey(), String(now)); } catch {}
+  }, []);
+  const unseenMissedCalls = missedCalls.filter((call) => new Date(call.createdAt).getTime() > missedCallsSeen).length;
+  const [e2eeLinkCode, setE2eeLinkCode] = useState(null);
+  const [linkRequest, setLinkRequest] = useState(null);
+  const declinedLinks = useRef(new Set());
+  const respondToLink = useCallback((approved) => {
+    setLinkRequest((request) => {
+      if (request && approved) e2ee.current.approveLink(request.requestId, request.publicKey);
+      if (request && !approved) declinedLinks.current.add(request.requestId);
+      return null;
+    });
+  }, []);
   const closeTutorial = useCallback(() => {
     setShowTutorial(false);
     socket.current.emit("tutorialDone");
@@ -213,6 +240,12 @@ function ChatScreen(props) {
       markSendFailed(replace, message);
     });
     socket.current.on("tutorialDone", () => setShowTutorial(false));
+    socket.current.on("e2eeLinkRequest", async ({ requestId, publicKey }) => {
+      if (e2ee.current?.status !== "ready" || declinedLinks.current.has(requestId)) return;
+      const code = await e2ee.current.linkCode(publicKey);
+      setLinkRequest((current) => current || { requestId, publicKey, code });
+    });
+    socket.current.on("e2eeLinkGranted", ({ sealed }) => e2ee.current?.receiveLink(sealed));
     socket.current.on("e2eeKeyChanged", ({ publicKey }) => {
       if (e2ee.current) e2ee.current.load(publicKey);
     });
@@ -297,6 +330,7 @@ function ChatScreen(props) {
         if (user_id) {
           setProfiles({ [user_id]: user });
           userID.current = user_id;
+          loadMissedCalls();
           setMutedChats(Object.fromEntries(
             (user.mutedChats || [])
               .filter((entry) => !entry.mutedUntil || new Date(entry.mutedUntil).getTime() > Date.now())
@@ -351,6 +385,7 @@ function ChatScreen(props) {
 
             socket.current.on(`messages`, async (stream) => {
               if (stream.data) stream.data = await Promise.all(stream.data.map(openMessage));
+              if (!stream.mode && stream.data?.some((m) => m.type === "call")) loadMissedCalls();
               // Only a real fetch proves the history is here. A lone live
               // message must not mark the chat loaded, or opening it later
               // would show that one message and never fetch the rest.
@@ -544,12 +579,16 @@ function ChatScreen(props) {
               });
             });
 
-            socket.current.on("locationUpdated", ({ cid, mid, lat, lng }) => {
+            socket.current.on("locationUpdated", async ({ cid, mid, lat, lng, uid, e2ee: envelope }) => {
+              const position = envelope
+                ? await e2ee.current.unseal(envelope, uid).then((plain) => plain.l, () => null)
+                : { lat, lng };
+              if (!position) return;
               setMessages((prev) => {
                 const chatStore = { ...(prev[cid] || {}) };
                 const msg = chatStore[mid];
                 if (!msg || !msg.location) return prev;
-                const updated = { ...msg, location: { ...msg.location, lat, lng } };
+                const updated = { ...msg, location: { ...msg.location, lat: position.lat, lng: position.lng } };
                 chatStore[mid] = updated;
                 db.transaction("messages", "readwrite").objectStore("messages").put(updated);
                 return { ...prev, [cid]: chatStore };
@@ -801,6 +840,10 @@ function ChatScreen(props) {
               socket,
               userId: String(data._id),
               onStatus: setE2eeStatus,
+              onLinkCode: setE2eeLinkCode,
+              onEnabled: () => {
+                if (!data.showTutorial) toast.success("End-to-end encryption is now on for your account.");
+              },
               onKeyChange: (uid) => {
                 const name = profilesRef.current[uid]?.name || "A contact";
                 toast.error(`${name}'s encryption key changed. Compare safety numbers if this is unexpected.`);
@@ -879,7 +922,13 @@ function ChatScreen(props) {
     <Context.Provider
       value={{
         e2ee,
+        missedCalls,
+        unseenMissedCalls,
+        markMissedCallsSeen,
         e2eeStatus,
+        e2eeLinkCode,
+        linkRequest,
+        respondToLink,
         openMessage,
         recipientsOf,
         sealFields,
@@ -966,6 +1015,7 @@ function ChatScreen(props) {
       <Suspense fallback={null}>
         <CallOverlay socket={socket} />
         {showTutorial && e2eeStatus !== "loading" && <Tutorial onClose={closeTutorial} />}
+        <E2eeLinkDialog />
       </Suspense>
     </Context.Provider>
   );

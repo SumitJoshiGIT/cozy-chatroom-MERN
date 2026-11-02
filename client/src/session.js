@@ -1,7 +1,6 @@
 import { post } from "./components/Axios";
 import { clearStoredAuthToken, getStoredAuthToken } from "./socketAuthToken";
 import { unsubscribeFromPush } from "./pushNotifications";
-import { clearKeyStore } from "./e2ee/keystore";
 
 const DB_NAME = "ChatApp";
 
@@ -12,11 +11,10 @@ export function clearLocalData(db) {
   try {
     localStorage.removeItem("lavender-drafts");
   } catch {}
-  const clearMessages = new Promise((resolve) => {
+  return new Promise((resolve) => {
     const request = indexedDB.deleteDatabase(DB_NAME);
     request.onsuccess = request.onerror = request.onblocked = () => resolve();
   });
-  return Promise.all([clearMessages, clearKeyStore()]);
 }
 
 export async function logout({ socket, db, navigate, everywhere = false }) {

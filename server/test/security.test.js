@@ -517,7 +517,7 @@ test('encrypted messages keep nothing readable on the server', async () => {
   assert.ok(await refused, 'an unsealed upload still needs a real file type');
 });
 
-test('encrypted edits stay sealed; key backups are only given to their owner', async () => {
+test('encrypted edits stay sealed; a device link only reaches the same account', async () => {
   const [aliceSocket, bobSocket] = await Promise.all([connect(alice), connect(bob)]);
   const cid = String(dm._id);
   const message = await models.MessagesModel.create({ chat: dm._id, uid: alice._id, content: '', e2ee: envelope(), type: 'text' });
@@ -528,20 +528,29 @@ test('encrypted edits stay sealed; key backups are only given to their owner', a
   assert.equal((await models.MessagesModel.findById(message._id).lean()).e2ee.ct, 'bmV3');
 
   const publicKey = Buffer.alloc(65, 9).toString('base64');
-  const backup = { ct: 'YWJj', iv: 'YWJj', salt: 'YWJj', iterations: 600000 };
-  assert.equal((await emitAck(aliceSocket, 'e2eeSetKey', { publicKey, backup })).ok, true);
-  assert.equal((await emitAck(aliceSocket, 'e2eeSetKey', { publicKey, backup: { ...backup, iterations: 1 } })).ok, false);
+  const otherKey = Buffer.alloc(65, 8).toString('base64');
+  assert.equal((await emitAck(aliceSocket, 'e2eeSetKey', { publicKey })).ok, true);
+  assert.equal((await emitAck(aliceSocket, 'e2eeSetKey', { publicKey: otherKey })).publicKey, publicKey, 'a second tab adopts the first key');
   assert.deepEqual(await emitAck(bobSocket, 'e2eeKeys', { uids: [String(alice._id)] }), { [String(alice._id)]: publicKey });
-  assert.equal((await emitAck(bobSocket, 'e2eeGetBackup', {})).backup, null);
-  assert.equal((await emitAck(aliceSocket, 'e2eeGetBackup', {})).backup.ct, 'YWJj');
   const reconnected = await connect(alice);
   assert.equal(reconnected.profile.e2eePublicKey, publicKey);
-  assert.equal(reconnected.profile.e2eeBackup, undefined);
+
+  const otherDevice = await connect(alice);
+  const request = once(reconnected, 'e2eeLinkRequest');
+  otherDevice.emit('e2eeLinkRequest', { publicKey: otherKey });
+  const { requestId } = await request;
+  const sealed = { spk: otherKey, iv: 'YWJj', ct: 'YWJj' };
+  const stolen = once(otherDevice, 'e2eeLinkGranted', 300);
+  bobSocket.emit('e2eeLinkGrant', { requestId, sealed });
+  assert.equal(await stolen, null, 'another account cannot answer a request');
+  const granted = once(otherDevice, 'e2eeLinkGranted');
+  reconnected.emit('e2eeLinkGrant', { requestId, sealed });
+  assert.deepEqual((await granted).sealed, sealed);
 });
 
 test('crypto: only recipients read, tampering and forged senders fail', async () => {
   const crypto = await import('../../client/src/e2ee/crypto.js');
-  const [a, b, c] = await Promise.all(['alice pass', 'bob pass', 'carol pass'].map((p) => crypto.createIdentity(p)));
+  const [a, b, c] = await Promise.all([1, 2, 3].map(() => crypto.createIdentity()));
   const recipients = { alice: a.publicKey, bob: b.publicKey };
   const sealed = await crypto.seal({ t: 'hello' }, { senderId: 'alice', privateKey: a.privateKey, publicKey: a.publicKey, recipients });
   assert.doesNotMatch(JSON.stringify(sealed), /hello/);
@@ -560,14 +569,43 @@ test('crypto: only recipients read, tampering and forged senders fail', async ()
   const forged = await crypto.seal({ t: 'forged' }, { senderId: 'alice', privateKey: c.privateKey, publicKey: c.publicKey, recipients });
   await assert.rejects(crypto.open({ ...forged, spk: a.publicKey }, asBob), 'cannot pose as alice');
 
-  const privateKey = await crypto.restoreIdentity(a.backup, 'alice pass');
-  assert.equal((await crypto.open(sealed, { senderId: 'alice', recipientId: 'alice', privateKey })).t, 'hello');
-  await assert.rejects(crypto.restoreIdentity(a.backup, 'wrong pass'), 'wrong passphrase');
+  const newDevice = await crypto.createIdentity();
+  const sealedKey = await crypto.sealIdentity(a, newDevice.publicKey);
+  assert.doesNotMatch(JSON.stringify(sealedKey), new RegExp(a.publicKey.slice(0, 20).replace(/[+/]/g, '.')));
+  const restored = await crypto.openIdentity(sealedKey, newDevice.privateKey);
+  assert.equal(restored.publicKey, a.publicKey);
+  assert.equal((await crypto.open(sealed, { senderId: 'alice', recipientId: 'alice', privateKey: restored.privateKey })).t, 'hello');
+  await assert.rejects(crypto.openIdentity(sealedKey, c.privateKey), 'only the requesting device can open it');
+  assert.equal(await crypto.linkCode(a.publicKey), await crypto.linkCode(a.publicKey));
+
+  for (const type of ['image/png', 'application/pdf', 'audio/webm;codecs=opus', 'video/mp4']) assert.equal(crypto.safeMediaType(type), type);
+  for (const type of ['text/html', 'image/svg+xml', 'application/xhtml+xml', undefined]) assert.equal(crypto.safeMediaType(type), 'application/octet-stream');
 
   const data = new TextEncoder().encode('file bytes');
   const file = await crypto.encryptBytes(data);
   assert.equal(new TextDecoder().decode(await crypto.decryptBytes(file.ct, file)), 'file bytes');
   assert.equal(await crypto.safetyNumber(a.publicKey, b.publicKey), await crypto.safetyNumber(b.publicKey, a.publicKey));
+});
+
+test('sealed live location relays ciphertext only; missed calls list skips your own', async () => {
+  const [aliceSocket, bobSocket] = await Promise.all([connect(alice), connect(bob)]);
+  const cid = String(dm._id);
+  const sent = await emitAck(aliceSocket, 'sendMessage', { cid, e2ee: envelope(), live: { durationMs: 60000 } });
+  const stored = await models.MessagesModel.findById(sent._id).lean();
+  assert.equal(stored.location.live, true);
+  assert.equal(stored.location.lat, undefined);
+  const moved = once(bobSocket, 'locationUpdated');
+  aliceSocket.emit('updateLocation', { id: String(sent._id), e2ee: { ...envelope(), ct: 'bW92ZWQ=' } });
+  const update = await moved;
+  assert.equal(update.e2ee.ct, 'bW92ZWQ=');
+  assert.equal(update.lat, undefined);
+  const plain = once(bobSocket, 'locationUpdated', 300);
+  aliceSocket.emit('updateLocation', { id: String(sent._id), lat: 1, lng: 2 });
+  assert.equal(await plain, null, 'coordinates cannot be mixed into a sealed share');
+
+  await models.MessagesModel.create({ chat: dm._id, uid: alice._id, type: 'call', content: 'Missed voice call' });
+  assert.equal((await emitAck(bobSocket, 'missedCalls', {})).length, 1);
+  assert.equal((await emitAck(aliceSocket, 'missedCalls', {})).length, 0, "your own unanswered call isn't missed");
 });
 
 test('orphaned attachments are removed; referenced and fresh ones stay', async () => {

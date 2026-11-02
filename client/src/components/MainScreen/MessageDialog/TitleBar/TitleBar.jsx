@@ -144,10 +144,10 @@ export default function (props){
             if (e.key === 'Escape') props.onToggleChatSearch();
           }}
           placeholder="Search in this chat"
-          className="flex-1 min-w-0 outline-none bg-transparent text-sm text-[var(--text)] placeholder-gray-400"
+          className="flex-1 min-w-0 outline-none bg-transparent text-sm text-[var(--text)] placeholder-ink-muted"
         />
         {props.chatSearchQuery && (
-          <span className="text-xs text-gray-400 shrink-0 tabular-nums">
+          <span className="text-xs text-ink-muted shrink-0 tabular-nums">
             {props.chatSearchResults.length > 0 ? `${props.chatSearchIndex + 1}/${props.chatSearchResults.length}` : '0/0'}
           </span>
         )}
@@ -173,7 +173,7 @@ export default function (props){
          </button>
         <div className="p-2 pt-1 flex flex-col min-w-0">
         <div className="text-sm max-w-52 truncate font-semibold text-[var(--text)]">{chat.name||"Unnamed"}</div>
-         <div className={`text-xs flex items-center gap-1.5 ${typingStatus ? 'text-[var(--accent-dark)]' : 'text-gray-400'}`}>
+         <div className={`text-xs flex items-center gap-1.5 ${typingStatus ? 'text-[var(--accent-dark)]' : 'text-ink-muted'}`}>
            {typingStatus && <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>}
            <span className="truncate">{status}</span>
            {!typingStatus && chat.disappearingDuration > 0 && <span className="disappearing-pill" title="Disappearing messages are on">⏱ {disappearingLabel}</span>}

@@ -3,7 +3,6 @@ const subtle = globalThis.crypto?.subtle;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const CURVE = { name: "ECDH", namedCurve: "P-256" };
-const PBKDF2_ITERATIONS = 600000;
 
 export const isSupported = () => !!subtle;
 
@@ -17,37 +16,12 @@ export const fromBase64 = (text) => Uint8Array.from(atob(text), (c) => c.charCod
 const randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
 
 const importPublic = (publicKey) => subtle.importKey("raw", fromBase64(publicKey), CURVE, false, []);
-const importPrivate = (pkcs8) => subtle.importKey("pkcs8", pkcs8, CURVE, false, ["deriveBits"]);
+// Extractable so an existing device can hand the key to a new one.
+const importPrivate = (pkcs8) => subtle.importKey("pkcs8", pkcs8, CURVE, true, ["deriveBits"]);
 
-async function passphraseKey(passphrase, salt, iterations) {
-  const base = await subtle.importKey("raw", encoder.encode(passphrase), "PBKDF2", false, ["deriveKey"]);
-  return subtle.deriveKey(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
-    base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"],
-  );
-}
-
-// The private key is extractable only inside this function, to back it up.
-export async function createIdentity(passphrase) {
+export async function createIdentity() {
   const pair = await subtle.generateKey(CURVE, true, ["deriveBits"]);
-  const publicKey = toBase64(await subtle.exportKey("raw", pair.publicKey));
-  const pkcs8 = await subtle.exportKey("pkcs8", pair.privateKey);
-  const salt = randomBytes(16);
-  const iv = randomBytes(12);
-  const key = await passphraseKey(passphrase, salt, PBKDF2_ITERATIONS);
-  const ct = await subtle.encrypt({ name: "AES-GCM", iv }, key, pkcs8);
-  return {
-    publicKey,
-    privateKey: await importPrivate(pkcs8),
-    backup: { ct: toBase64(ct), iv: toBase64(iv), salt: toBase64(salt), iterations: PBKDF2_ITERATIONS },
-  };
-}
-
-// Throws on a wrong passphrase: AES-GCM authenticates the key it unwraps.
-export async function restoreIdentity(backup, passphrase) {
-  const key = await passphraseKey(passphrase, fromBase64(backup.salt), backup.iterations);
-  const pkcs8 = await subtle.decrypt({ name: "AES-GCM", iv: fromBase64(backup.iv) }, key, fromBase64(backup.ct));
-  return importPrivate(pkcs8);
+  return { publicKey: toBase64(await subtle.exportKey("raw", pair.publicKey)), privateKey: pair.privateKey };
 }
 
 // Static-static ECDH: only the two parties can make this key, so a valid wrap
@@ -117,3 +91,33 @@ export async function safetyNumber(publicKeyA, publicKeyB) {
   for (let i = 0; i < 24; i += 2) groups.push(String(((digest[i] << 8) | digest[i + 1]) % 100000).padStart(5, "0"));
   return groups.join(" ");
 }
+
+// Shown on both devices. The server relays the request, so a swapped key
+// shows a different code.
+export async function linkCode(publicKey) {
+  const digest = new Uint8Array(await subtle.digest("SHA-256", fromBase64(publicKey)));
+  return String((((digest[0] << 16) | (digest[1] << 8) | digest[2]) % 1000000)).padStart(6, "0");
+}
+
+export async function sealIdentity(identity, requesterKey) {
+  const sender = await createIdentity();
+  const iv = randomBytes(12);
+  const wrapKey = await pairKey(sender.privateKey, requesterKey);
+  const pkcs8 = toBase64(await subtle.exportKey("pkcs8", identity.privateKey));
+  const plain = encoder.encode(JSON.stringify({ publicKey: identity.publicKey, pkcs8 }));
+  const ct = await subtle.encrypt({ name: "AES-GCM", iv }, wrapKey, plain);
+  return { spk: sender.publicKey, iv: toBase64(iv), ct: toBase64(ct) };
+}
+
+export async function openIdentity(sealed, requesterPrivateKey) {
+  const wrapKey = await pairKey(requesterPrivateKey, sealed.spk);
+  const plain = await subtle.decrypt({ name: "AES-GCM", iv: fromBase64(sealed.iv) }, wrapKey, fromBase64(sealed.ct));
+  const { publicKey, pkcs8 } = JSON.parse(decoder.decode(plain));
+  return { publicKey, privateKey: await importPrivate(fromBase64(pkcs8)) };
+}
+
+// A sealed file's type comes from the sender and the server can't check it.
+// Blob URLs run on this site's origin, so anything that could carry script
+// (HTML, SVG) must never keep its declared type.
+const DISPLAYABLE = /^(image\/(png|jpe?g|webp)|video\/(mp4|webm|ogg|quicktime)|audio\/[\w.+-]+|application\/pdf)(;.*)?$/i;
+export const safeMediaType = (type) => (typeof type === "string" && DISPLAYABLE.test(type) ? type : "application/octet-stream");

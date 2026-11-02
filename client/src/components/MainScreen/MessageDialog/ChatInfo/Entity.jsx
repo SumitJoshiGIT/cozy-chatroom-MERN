@@ -23,7 +23,7 @@ export default function (props){
     socket.current.emit('demoteUser',{chatID:props.chat._id, userID:props.id})
   },[])
     
-   return <div className="mt-2 min-h-16 m-1 shadow-sm flex items-center min-w-62 hover:bg-gray-100 p-2 bg-white h-auto w-auto rounded-md" >
+   return <div className="mt-2 min-h-16 m-1 shadow-sm flex items-center min-w-62 hover:bg-accent-soft p-2 bg-surface h-auto w-auto rounded-md" >
          <div className="h-full flex items-center">
            <Avatar src={contact.img && contact.img.src} size="sm" />
          </div>
@@ -32,7 +32,7 @@ export default function (props){
              <div className="truncate max-w-36  overflow-hidden text-ellipses  text-lg font-semibold">{contact.name||"Unnamed"}</div>
              <div  className="text-xs">{owner?'owner':(admin?'admin':'member')}</div>
            </div>
-           <div className="text-gray-400 text-base">
+           <div className="text-ink-muted text-base">
            </div>
          </div>
          {(props.admin)&&

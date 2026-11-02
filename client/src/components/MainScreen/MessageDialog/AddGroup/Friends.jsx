@@ -29,7 +29,7 @@ export default function (props){
     return(
     <div className="h-full flex-1 flex flex-col w-full min-h-0">
      {props.members.size > 0 && (
-       <div className="flex gap-3 overflow-x-auto px-1 pb-3 mb-1 border-b border-gray-100 shrink-0">
+       <div className="flex gap-3 overflow-x-auto px-1 pb-3 mb-1 border-b border-line shrink-0">
          {additions}
        </div>
      )}
@@ -38,7 +38,7 @@ export default function (props){
        {!contactsLoaded ? (
          <div className="flex justify-center mt-6"><Spinner /></div>
        ) : friends.length > 0 ? friends : (
-         <div className="text-center text-sm text-gray-400 mt-6">
+         <div className="text-center text-sm text-ink-muted mt-6">
            {contacts.size === 0 ? "Message someone to add them here." : "No matches."}
          </div>
        )}

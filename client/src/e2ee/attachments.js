@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiOrigin } from "../apiOrigin";
-import { decryptBytes } from "./crypto";
+import { decryptBytes, safeMediaType } from "./crypto";
 
 const urls = new Map();
 const pending = new Map();
@@ -11,7 +11,7 @@ async function decrypt(attachment, mediaToken) {
   const response = await fetch(`${apiOrigin}/${attachment.src}?mt=${encodeURIComponent(mediaToken)}`);
   if (!response.ok) throw new Error("Download failed");
   const plain = await decryptBytes(await response.arrayBuffer(), attachment.sealedWith);
-  urls.set(attachment.src, URL.createObjectURL(new Blob([plain], { type: attachment.contentType })));
+  urls.set(attachment.src, URL.createObjectURL(new Blob([plain], { type: safeMediaType(attachment.contentType) })));
 }
 
 // Sealed files can't go straight into <img src>, so they're fetched, decrypted

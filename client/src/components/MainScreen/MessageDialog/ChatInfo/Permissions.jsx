@@ -46,11 +46,11 @@ export default function Permissions(props) {
       {ROWS.map((row) => (
         <div key={row.key} className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <div className="font-medium text-sm text-gray-800 dark:text-gray-100">{row.label}</div>
-            <div className="text-xs text-gray-400">{row.body}</div>
+            <div className="font-medium text-sm text-ink ">{row.label}</div>
+            <div className="text-xs text-ink-muted">{row.body}</div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs text-gray-400">{permission[row.key] === "everyone" ? "Everyone" : "Admins only"}</span>
+            <span className="text-xs text-ink-muted">{permission[row.key] === "everyone" ? "Everyone" : "Admins only"}</span>
             <Switch
               checked={permission[row.key] === "everyone"}
               onChange={(v) => setKey(row.key, v)}

@@ -77,29 +77,29 @@ export default function AttachMenu({ onPick, onSendLocation, sharingLiveLocation
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         aria-label="Attach"
-        className="rounded-full p-1.5 h-fit hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 transition-all"
+        className="rounded-full p-1.5 h-fit hover:bg-accent-soft active:scale-95 transition-all"
       >
         <img src="/attachment.svg" alt="" className="w-5 h-5 opacity-70 dark:invert dark:opacity-80" />
       </button>
       {open && (
-        <div className="absolute z-30 bottom-12 left-0 w-56 rounded-2xl shadow-lg bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-1 text-sm">
+        <div className="absolute z-30 bottom-12 left-0 w-56 rounded-2xl shadow-lg bg-surface border border-line p-1 text-sm">
           {loading ? (
             <div className="flex items-center justify-center py-4"><Spinner size="sm" /></div>
           ) : view === "durations" ? (
             <>
-              <div className="px-2 py-1 text-xs font-semibold text-gray-400">Duration</div>
+              <div className="px-2 py-1 text-xs font-semibold text-ink-muted">Duration</div>
               {DURATIONS.map((d) => (
                 <button
                   key={d.label}
                   type="button"
                   onClick={() => sendLive(d.ms)}
-                  className="w-full text-left px-2 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10"
+                  className="w-full text-left px-2 py-2 rounded-lg hover:bg-accent-soft "
                 >{d.label}</button>
               ))}
               <button
                 type="button"
                 onClick={() => setView("location")}
-                className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg text-gray-400 hover:bg-black/5 dark:hover:bg-white/10"
+                className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg text-ink-muted hover:bg-accent-soft "
               >
                 <img src="/back-one.svg" alt="" className="w-4 h-4 dark:invert opacity-70" />
                 <span>Back</span>
@@ -110,7 +110,7 @@ export default function AttachMenu({ onPick, onSendLocation, sharingLiveLocation
               <button
                 type="button"
                 onClick={sendCurrent}
-                className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10"
+                className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg hover:bg-accent-soft "
               >
                 <img src="/location.svg" alt="" className="w-5 h-5 opacity-70 dark:invert" />
                 <span>Send current location</span>
@@ -120,7 +120,7 @@ export default function AttachMenu({ onPick, onSendLocation, sharingLiveLocation
                 disabled={!!sharingLiveLocation}
                 title={sharingLiveLocation ? "Already sharing live location in this chat" : undefined}
                 onClick={() => setView("durations")}
-                className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-40"
+                className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg hover:bg-accent-soft disabled:opacity-40"
               >
                 <img src="/location.svg" alt="" className="w-5 h-5 opacity-70 dark:invert" />
                 <span>Share live location</span>
@@ -128,7 +128,7 @@ export default function AttachMenu({ onPick, onSendLocation, sharingLiveLocation
               <button
                 type="button"
                 onClick={() => setView("menu")}
-                className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg text-gray-400 hover:bg-black/5 dark:hover:bg-white/10"
+                className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg text-ink-muted hover:bg-accent-soft "
               >
                 <img src="/back-one.svg" alt="" className="w-4 h-4 dark:invert opacity-70" />
                 <span>Back</span>
@@ -144,7 +144,7 @@ export default function AttachMenu({ onPick, onSendLocation, sharingLiveLocation
                     onPick(c.accept);
                     close();
                   }}
-                  className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10"
+                  className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg hover:bg-accent-soft "
                 >
                   <img src={c.icon} alt="" className="w-5 h-5 opacity-70 dark:invert" />
                   <span>{c.label}</span>
@@ -153,7 +153,7 @@ export default function AttachMenu({ onPick, onSendLocation, sharingLiveLocation
               <button
                 type="button"
                 onClick={() => setView("location")}
-                className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10"
+                className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg hover:bg-accent-soft "
               >
                 <img src="/location.svg" alt="" className="w-5 h-5 opacity-70 dark:invert" />
                 <span>Location</span>

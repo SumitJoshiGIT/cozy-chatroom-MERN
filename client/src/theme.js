@@ -37,11 +37,12 @@ export function applyDarkMode(enabled) {
 export function applyTheme(id) {
   const theme = THEMES.find((t) => t.id === id) || THEMES[0];
   const root = document.documentElement;
-  root.style.setProperty('--accent', theme.accent);
-  root.style.setProperty('--accent-dark', theme.accentDark);
-  root.style.setProperty('--accent-light', theme.accentLight);
-  root.style.setProperty('--grad-start', theme.gradStart);
-  root.style.setProperty('--grad-end', theme.gradEnd);
+  // Inline values beat .dark, so themes set inputs that index.css maps per mode.
+  root.style.setProperty('--theme-accent', theme.accent);
+  root.style.setProperty('--theme-accent-dark', theme.accentDark);
+  root.style.setProperty('--theme-accent-light', theme.accentLight);
+  root.style.setProperty('--theme-grad-start', theme.gradStart);
+  root.style.setProperty('--theme-grad-end', theme.gradEnd);
   try {
     localStorage.setItem(STORAGE_KEY, theme.id);
   } catch {}

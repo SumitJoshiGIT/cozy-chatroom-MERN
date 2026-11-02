@@ -19,12 +19,12 @@ export default function (props){
            <Avatar src={contact.img && contact.img.src} size="sm" />
            <button
              onClick={onClick}
-             className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-gray-500 hover:bg-red-500 transition-colors flex items-center justify-center"
+             className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-gray-500 hover:bg-danger transition-colors flex items-center justify-center"
            >
              <img className="w-2 h-2 invert" src={close} alt="Remove" />
            </button>
          </div>
-         <div className="truncate text-xs text-gray-600 w-full text-center">{contact.name||"Unnamed"}</div>
+         <div className="truncate text-xs text-ink-muted w-full text-center">{contact.name||"Unnamed"}</div>
        </div>
     :<></>
 }

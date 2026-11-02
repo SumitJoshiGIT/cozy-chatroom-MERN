@@ -78,45 +78,51 @@ const MessageBar = React.memo((props) => {
     return () => { active = false; };
   }, [chatID.id, chatID.type, e2eeStatus, (chat.users || []).length]);
 
+  function watchLiveLocation(id, durationMs, publish) {
+    clearLiveLocation();
+    const cid = chatID.id;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => publish({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    );
+    liveLocationRef.current = { messageId: id, watchId, cid };
+    setLiveLocationChat(cid);
+    setTimeout(() => {
+      if (liveLocationRef.current && liveLocationRef.current.messageId === id) clearLiveLocation();
+    }, durationMs || 15 * 60 * 1000);
+  }
+
   async function sendLocation({ lat, lng, live, durationMs }) {
+    const { id: cid, type } = chatID;
     if (e2eeStatus === "locked") {
-      toast.error("Unlock encryption to send messages.");
+      toast.error("Approve this device to send messages.");
       return;
     }
-    const encrypted = e2ee.current ? await e2ee.current.willEncrypt(recipientsOf(chatID.id, chatID.type)).catch(() => null) : false;
+    const encrypted = e2ee.current ? await e2ee.current.willEncrypt(recipientsOf(cid, type)).catch(() => null) : false;
     if (encrypted === null) {
       toast.error("This chat's encryption could not be checked. Location not sent.");
       return;
     }
-    if (encrypted) {
-      if (live) {
-        toast.error("Live location isn't available in encrypted chats. Share your current location instead.");
-        return;
-      }
-      sendSealed({ event: "sendMessage", cid: chatID.id, type: chatID.type, location: { lat, lng, live: false } });
+    if (!encrypted) {
+      socket.current.emit("sendLocation", { cid, lat, lng, live, durationMs }, (res) => {
+        if (!res || !res._id || !live) return;
+        watchLiveLocation(res._id, durationMs, (position) => socket.current.emit("updateLocation", { id: res._id, ...position }));
+      });
       return;
     }
-    socket.current.emit("sendLocation", { cid: chatID.id, lat, lng, live, durationMs }, (res) => {
-      if (!res || !res._id || !live) return;
-      clearLiveLocation();
-      const cid = chatID.id;
-      const watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          socket.current.emit("updateLocation", {
-            id: res._id,
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-          });
-        },
-        () => {},
-        { enableHighAccuracy: true, maximumAge: 5000 }
-      );
-      liveLocationRef.current = { messageId: res._id, watchId, cid };
-      setLiveLocationChat(cid);
-      setTimeout(() => {
-        if (liveLocationRef.current && liveLocationRef.current.messageId === res._id) clearLiveLocation();
-      }, durationMs || 15 * 60 * 1000);
-    });
+    try {
+      const fields = await sealFields(cid, type, { location: { lat, lng } });
+      socket.current.emit("sendMessage", { cid, ...fields, live: live ? { durationMs } : undefined }, (res) => {
+        if (!res || !res._id || !live) return;
+        watchLiveLocation(res._id, durationMs, async (position) => {
+          const update = await sealFields(cid, type, { location: position });
+          socket.current.emit("updateLocation", { id: res._id, e2ee: update.e2ee });
+        });
+      });
+    } catch (err) {
+      toast.error(err.message);
+    }
   }
 
   const sharingLiveLocation = liveLocationChat === chatID.id;
@@ -317,7 +323,7 @@ const MessageBar = React.memo((props) => {
       return (
         <div
           style={{ borderLeftColor: p.color || "var(--accent)" }}
-          className="composer-context flex items-center w-full bg-white dark:bg-gray-800 border-l-2 rounded-t-lg rounded-md  mb-2 p-1"
+          className="composer-context flex items-center w-full bg-surface border-l-2 rounded-t-lg rounded-md  mb-2 p-1"
         >
           <img src={reply} className="w-7 h-7 mr-2"></img>
           <div className="flex-1 min-w-0 rounded-md pl-2">
@@ -337,9 +343,9 @@ const MessageBar = React.memo((props) => {
   const editBanner = useMemo(() => {
     if (!props.edit) return null;
     return (
-      <div className="composer-context flex items-center w-full bg-white dark:bg-gray-800 border-l-2 border-[var(--accent)] rounded-t-lg rounded-md mb-2 p-1">
+      <div className="composer-context flex items-center w-full bg-surface border-l-2 border-[var(--accent)] rounded-t-lg rounded-md mb-2 p-1">
         <img src={edit} className="w-5 h-5 mx-2 dark:invert dark:opacity-80"></img>
-        <div className="flex-1 rounded-md pl-2 text-xs font-semibold text-gray-600 dark:text-gray-300">
+        <div className="flex-1 rounded-md pl-2 text-xs font-semibold text-ink-muted ">
           Editing message
         </div>
         <button type="button" onClick={() => { props.setEdit(); setMessage(""); }} className="p-1">
@@ -399,7 +405,7 @@ const MessageBar = React.memo((props) => {
       {files.length > 0 && (
         <div className="flex flex-wrap gap-2 w-full mb-2">
           {files.map((file,idx)=>(
-            <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden shadow-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden shadow-sm border border-line bg-surface ">
               {file.type.startsWith('image/') ? (
                 <img src={`data:${file.type};base64,${file.file}`} alt={file.name} className="w-full h-full object-cover" />
               ) : file.type.startsWith('video/') ? (
@@ -407,7 +413,7 @@ const MessageBar = React.memo((props) => {
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
                   <img src={fileIcon} className="w-6 h-6 opacity-60 dark:invert" alt="" />
-                  <span className="text-[9px] text-gray-500 dark:text-gray-400 truncate w-full text-center px-1">{file.name}</span>
+                  <span className="text-[9px] text-ink-muted truncate w-full text-center px-1">{file.name}</span>
                 </div>
               )}
               <button
@@ -422,8 +428,8 @@ const MessageBar = React.memo((props) => {
       {editBanner}
       {!props.edit && replyTo}
       {blockedOther ? (
-        <div className="p-3 rounded-3xl shadow-md bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 w-full flex items-center justify-between gap-2">
-          <span className="text-sm text-gray-500 dark:text-gray-400">You've blocked this contact — messages won't be delivered.</span>
+        <div className="p-3 rounded-3xl shadow-md bg-surface border border-line w-full flex items-center justify-between gap-2">
+          <span className="text-sm text-ink-muted ">You've blocked this contact — messages won't be delivered.</span>
           <button
             type="button"
             onClick={() => toggleBlock(chat.sender)}
@@ -432,9 +438,9 @@ const MessageBar = React.memo((props) => {
         </div>
       ) : (chatID.type=='user'||(Array.isArray(chat.users)&&chat.users.includes(userID.current)))? (
         recording ? (
-        <div className="p-1.5 rounded-3xl shadow-md bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 w-full flex items-center gap-2 px-4 py-2.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-          <span className="text-sm text-gray-600 dark:text-gray-300 tabular-nums">
+        <div className="p-1.5 rounded-3xl shadow-md bg-surface border border-line w-full flex items-center gap-2 px-4 py-2.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-danger animate-pulse shrink-0" />
+          <span className="text-sm text-ink-muted tabular-nums">
             {Math.floor(recordingSeconds / 60)}:{(recordingSeconds % 60).toString().padStart(2, '0')}
           </span>
           <span className="flex-1" />
@@ -442,7 +448,7 @@ const MessageBar = React.memo((props) => {
             type="button"
             onClick={() => stopRecording(true)}
             aria-label="Cancel recording"
-            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:bg-black/5 dark:hover:bg-white/10"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-ink-muted hover:bg-accent-soft "
           >
             <img src={close} className="w-4 h-4 dark:invert dark:opacity-80" alt="" />
           </button>
@@ -490,7 +496,7 @@ const MessageBar = React.memo((props) => {
               ref.current.style.height = ref.current.scrollHeight + "px";
             }}
             aria-label="Message"
-            className="pt-2 pb-1.5 align-bottom bg-transparent text-sm max-h-36 w-full outline-none border-none min-h-9 h-auto text-gray-700 dark:text-gray-100 resize-none placeholder-gray-400 dark:placeholder-gray-500"
+            className="pt-2 pb-1.5 align-bottom bg-transparent text-sm max-h-36 w-full outline-none border-none min-h-9 h-auto text-ink resize-none placeholder-ink-muted "
             placeholder={sealed ? "Encrypted message..." : sealed === false ? "Not encrypted: someone here has no key..." : "Write your message..."}
             type="text"
             onChange={(event) => {

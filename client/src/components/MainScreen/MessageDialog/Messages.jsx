@@ -1,3 +1,4 @@
+import { motionAllowed } from "../../../motion";
 import MessageBar from "./MessageBar/MessageBar";
 import Message from "./MessageBar/Message";
 import ForwardDialog from "./ForwardDialog";
@@ -20,6 +21,14 @@ export default function MessageDialog(props) {
   const messagesRef = useRef(Messages);
   messagesRef.current = Messages;
   const searchTerm = useRef("");
+  useEffect(() => {
+    if (scrollable.current && motionAllowed()) {
+      scrollable.current.animate(
+        [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }],
+        { duration: 240, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
+      );
+    }
+  }, [chatID.id]);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [showJump, setShowJump] = useState(false);
   const nearBottom = useRef(true);
@@ -478,34 +487,34 @@ export default function MessageDialog(props) {
         />
       )}
       {chatID.id && activePinned && (
-        <div className="message-pin-bar w-full px-3 py-1.5 bg-white/90 dark:bg-gray-800/90 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2 text-xs">
+        <div className="message-pin-bar w-full px-3 py-1.5 bg-white/90 border-b border-line flex items-center gap-2 text-xs">
           <img src={pinIcon} alt="" className="w-3.5 h-3.5 opacity-60 dark:invert shrink-0" />
           {pinnedIds.length > 1 && (
             <button
               onClick={() => setPinIndex((activePinIndex - 1 + pinnedIds.length) % pinnedIds.length)}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
+              className="text-ink-muted hover:text-ink-muted shrink-0"
             >‹</button>
           )}
           <div
             onClick={() => jumpToMatch(activePinned)}
             className="flex-1 min-w-0 cursor-pointer"
           >
-            <div className="text-[var(--accent-dark)] dark:text-[var(--accent)] font-semibold truncate">
+            <div className="text-[var(--accent-dark)] (--accent)] font-semibold truncate">
               {(profiles[activePinned.uid] && profiles[activePinned.uid].name) || "Pinned"}
-              {pinnedIds.length > 1 && <span className="text-gray-400 font-normal"> · {activePinIndex + 1}/{pinnedIds.length}</span>}
+              {pinnedIds.length > 1 && <span className="text-ink-muted font-normal"> · {activePinIndex + 1}/{pinnedIds.length}</span>}
             </div>
-            <div className="truncate text-gray-600 dark:text-gray-300">{pinnedPreview(activePinned)}</div>
+            <div className="truncate text-ink-muted ">{pinnedPreview(activePinned)}</div>
           </div>
           {pinnedIds.length > 1 && (
             <button
               onClick={() => setPinIndex((activePinIndex + 1) % pinnedIds.length)}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
+              className="text-ink-muted hover:text-ink-muted shrink-0"
             >›</button>
           )}
           {canPin && (
             <button
               onClick={() => unpinMessage(activePinned._id, chatID.id)}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
+              className="text-ink-muted hover:text-ink-muted shrink-0"
             >✕</button>
           )}
         </div>

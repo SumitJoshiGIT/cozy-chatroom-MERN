@@ -68,7 +68,7 @@ export default function (props){
     return <Card className='group-create-card max-w-md w-full h-full flex flex-col overflow-hidden animate-fade-in-up'>
       <div className="relative shrink-0">
         <div className="group-create-cover flex items-center w-full h-28">
-          <IconButton icon={back} alt="Back" onClick={()=>setMessageDialog(0)} className="m-3 absolute bg-white shadow-sm" />
+          <IconButton icon={back} alt="Back" onClick={()=>setMessageDialog(0)} className="m-3 absolute z-10 bg-surface shadow-sm" />
         </div>
         <div className="group-create-identity flex flex-col items-center -mt-12">
           <ImageInput src={group} fileform={fileform} callback={()=>{}} editable={true} />
@@ -94,7 +94,7 @@ export default function (props){
       <div className="group-create-footer shrink-0 flex items-center justify-between px-5 py-4">
         <div>
           <div className="text-sm font-semibold text-[var(--text)]">{members.size} selected</div>
-          {error && <div className="text-xs text-red-500 mt-1">{error}</div>}
+          {error && <div className="text-xs text-danger mt-1">{error}</div>}
         </div>
         <Button
           onClick={createGroup}

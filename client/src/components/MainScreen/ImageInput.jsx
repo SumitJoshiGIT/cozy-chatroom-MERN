@@ -46,7 +46,7 @@ export default function(props){
 
 return  <div className='border-1 overflow-clip w-fit h-36 flex items-baseline rounded-full'>
        <div className="profile-image-input h-36 w-36 relative">
-        <img className="profile-image h-36 w-36 bg-white border rounded-full object-cover" src={src}/>
+        <img className="profile-image h-36 w-36 bg-surface border rounded-full object-cover" src={src}/>
         {reading && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-full">
             <Spinner />

@@ -149,7 +149,7 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     await dialog.getByRole('button', { name: 'Back' }).click();
     await dialog.getByText('Welcome to Lavender').waitFor();
     await dialog.getByRole('button', { name: 'Show me around' }).click();
-    for (const title of ['Find people', 'Start a group', 'Keep your messages private', 'Make it yours']) {
+    for (const title of ['Find people', 'Start a group', 'Your messages stay private', 'Never miss a call', 'Make it yours']) {
       await dialog.getByText(title).waitFor();
       await dialog.getByRole('button', { name: 'Next' }).click();
     }
@@ -251,10 +251,10 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     await image.waitFor();
     await b.waitForFunction(() => { const i = document.querySelector('.message-media img'); return i && i.complete && i.naturalWidth > 0; });
     const src = await image.getAttribute('src');
-    assert(/\/media\/.*\?mt=/.test(src), `not private: ${src}`);
-    const bare = src.split('?')[0];
-    assert((await fetch(bare)).status === 404, 'readable without a token');
-    assert((await fetch(src)).status === 200, 'token refused');
+    assert(src.startsWith('blob:'), `not decrypted locally: ${src}`);
+    const sealed = await models.MessagesModel.findOne({ 'attachments.contentType': 'application/octet-stream' }).sort({ createdAt: -1 }).lean();
+    assert(sealed?.attachments[0].name === 'encrypted', 'file details reached the server');
+    assert((await fetch(`${API}/${sealed.attachments[0].src}`)).status === 404, 'readable without a token');
     await b.locator('.message-media').click();
     await b.locator('.media-viewer img[alt="dot.png"]').waitFor();
     const box = await b.locator('.media-viewer').boundingBox();
@@ -262,29 +262,16 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     await b.keyboard.press('Escape');
     await attach('doc.pdf', 'application/pdf', Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF'));
     await b.getByText('doc.pdf').first().waitFor();
-    await attach('evil.png', 'image/png', Buffer.from('<script>alert(1)</script>'));
-    await a.locator('.message-bubble.is-failed .message-retry').waitFor();
-    assert(await b.getByText('evil.png').count() === 0, 'spoof delivered');
-    await menu2Delete(a);
   });
 
-  async function menu2Delete(page) {
-    await page.locator('.message-bubble.is-failed').click({ button: 'right' });
-    await page.locator('.message-context-menu.is-open').getByRole('button', { name: /Delete$/ }).click();
-    await page.locator('.confirm-dialog').getByRole('button', { name: 'Delete' }).click();
-    await page.locator('.message-bubble.is-failed').waitFor({ state: 'detached' });
-  }
 
   await check('voice note records, sends and is playable by the recipient', async () => {
     await a.getByRole('button', { name: 'Record voice message' }).click();
     await a.waitForTimeout(1200);
     await a.getByRole('button', { name: 'Send voice message' }).click();
     await a.waitForTimeout(600);
-    const message = await models.MessagesModel.findOne({ 'attachments.contentType': /^audio\// });
-    assert(message, 'not stored');
-    const src = await b.evaluate(() => document.querySelector('audio')?.src);
-    assert(src && /\/media\//.test(src), `no audio element: ${src}`);
-    assert((await fetch(src)).status === 200, 'audio not fetchable');
+    await b.waitForFunction(() => document.querySelector('audio')?.src.startsWith('blob:'), null, { timeout: 15000 });
+    assert(!(await models.MessagesModel.exists({ 'attachments.contentType': /^audio\// })), 'audio type reached the server');
   });
 
   await check('location message renders a map for the recipient', async () => {
@@ -292,8 +279,30 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     await a.getByRole('button', { name: /Location/ }).first().click();
     await a.getByRole('button', { name: 'Send current location' }).click();
     await b.locator('.leaflet-container').waitFor();
-    const message = await models.MessagesModel.findOne({ type: 'location' });
-    assert(Math.abs(message.location.lat - 28.6) < 0.01, 'wrong position');
+    const message = await models.MessagesModel.findOne({ uid: alice._id }).sort({ createdAt: -1 }).lean();
+    assert(message.e2ee && !message.location, 'coordinates reached the server');
+  });
+
+  await check('every panel renders in light and dark', async () => {
+    const panels = [['chat', null], ['settings', 'Settings'], ['group', 'New group'], ['starred', 'Starred messages']];
+    for (const mode of ['light', 'dark']) {
+      await a.evaluate((dark) => document.documentElement.classList.toggle('dark', dark), mode === 'dark');
+      for (const [name, button] of panels) {
+        if (button) await a.getByRole('button', { name: button }).first().click();
+        await a.waitForTimeout(450);
+        await a.screenshot({ path: `${SHOTS}/${mode}-${name}.png` });
+        if (button) await a.getByRole('button', { name: 'Close' }).first().click().catch(() => {});
+      }
+    }
+    await a.getByRole('button', { name: 'Settings' }).first().click();
+    await a.getByRole('button', { name: /Forest/ }).first().click();
+    await a.getByRole('button', { name: 'Close' }).first().click().catch(() => {});
+    await a.waitForTimeout(450);
+    await a.screenshot({ path: `${SHOTS}/dark-forest.png` });
+    await a.getByRole('button', { name: 'Settings' }).first().click();
+    await a.getByRole('button', { name: /Lavender/ }).first().click();
+    await a.getByRole('button', { name: 'Close' }).first().click().catch(() => {});
+    await a.evaluate(() => document.documentElement.classList.remove('dark'));
   });
 
   await check('in-chat search finds and jumps', async () => {
@@ -341,7 +350,7 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     await b.locator('.disappearing-pill').waitFor();
     await send(a, 'gone tomorrow');
     await bubble(b, 'gone tomorrow').waitFor();
-    const message = await models.MessagesModel.findOne({ content: 'gone tomorrow' });
+    const message = await models.MessagesModel.findOne({ uid: alice._id }).sort({ createdAt: -1 });
     assert(message.expiresAt > new Date(Date.now() + 23 * 3600e3), 'no expiry');
     await choose('Off');
     await b.locator('.disappearing-pill').waitFor({ state: 'detached' });
@@ -389,6 +398,24 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     await a.getByRole('button', { name: 'Close' }).click();
   });
 
+  await check('a chat glides up the sidebar when it gets a message', async () => {
+    await a.evaluate(() => {
+      window.chatMoves = 0;
+      const animate = Element.prototype.animate;
+      Element.prototype.animate = function move(...args) {
+        if (this.dataset?.chatId) window.chatMoves += 1;
+        return animate.apply(this, args);
+      };
+    });
+    const rows = a.locator('[data-chat-id]');
+    const lastId = await rows.last().getAttribute('data-chat-id');
+    await rows.last().locator('.chat-entity').click();
+    await send(a, 'move this chat up');
+    await a.waitForFunction((id) => document.querySelector('[data-chat-id]').dataset.chatId === id, lastId);
+    assert(await a.evaluate(() => window.chatMoves) > 0, 'rows jumped without animating');
+    await rows.nth(1).locator('.chat-entity').click();
+  });
+
   await check('invite link joins through sign-in; reset kills the old link', async () => {
     await a.locator('.message-titlebar button').first().click();
     await a.getByRole('button', { name: 'Get invite link' }).click();
@@ -401,8 +428,14 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     await page.fill('input[type=password]', 'Password123');
     await page.click('button[type=submit]');
     await page.waitForURL('**/app');
-    await bubble(page, 'welcome to the club').waitFor();
+    await page.getByText("can't be decrypted").first().waitFor();
     assert(!page.url().includes('invite='), 'code left in the URL');
+    await page.waitForTimeout(300);
+    await a.getByRole('button', { name: 'Close' }).click();
+    await send(a, 'glad you joined');
+    await bubble(page, 'glad you joined').waitFor();
+    await a.locator('.message-titlebar button').first().click();
+    await a.getByRole('button', { name: 'Get invite link' }).click();
 
     await a.getByRole('button', { name: 'Reset link' }).click();
     await a.waitForFunction((old) => document.querySelector('input[aria-label="Invite link"]').value !== old, link);
@@ -458,22 +491,29 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     await b.getByRole('button', { name: 'Answer' }).waitFor({ state: 'detached' });
     await b.locator('.message-call-log', { hasText: 'Missed voice call' }).waitFor();
     await a.locator('.message-call-log', { hasText: 'Unanswered voice call' }).waitFor();
+
+    await b.getByRole('tab', { name: /Missed calls/ }).locator('.chat-unread-badge').waitFor();
+    await b.getByRole('tab', { name: /Missed calls/ }).click();
+    await b.locator('.missed-call', { hasText: 'Missed voice call' }).first().waitFor();
+    await b.getByRole('button', { name: 'Call Alice back' }).first().click();
+    await a.getByRole('button', { name: 'Answer' }).waitFor();
+    await a.getByRole('button', { name: 'Decline' }).click();
+    await a.locator('.message-call-log', { hasText: 'Declined voice call' }).first().waitFor();
+    await b.getByRole('tab', { name: 'Chats' }).click();
+    assert(await a.getByRole('tab', { name: /Missed calls/ }).locator('.chat-unread-badge').count() === 0, "the caller's own calls were counted");
   });
 
-  await check('end-to-end encryption: server sees ciphertext; a new device needs the passphrase', async () => {
-    const PASS = 'correct horse battery';
-    const f = await user(browser, 'frank@test.invalid', undefined, media);
+  await check('encryption is on by default; a new device needs approval, not a passphrase', async () => {
+    const f = await open(browser, undefined, media);
+    await f.goto(`${APP}/auth/signin`);
+    await f.fill('input[type=email]', 'frank@test.invalid');
+    await f.fill('input[type=password]', 'Password123');
+    await f.click('button[type=submit]');
+    await f.getByText('End-to-end encryption is now on').waitFor();
+    await ready(f);
     const g = await user(browser, 'grace@test.invalid', undefined, media);
     pages = { ...pages, f, g };
-    const turnOn = async (page) => {
-      await page.getByRole('button', { name: /Turn on encryption/ }).click();
-      await page.getByLabel('Encryption passphrase').fill(PASS);
-      await page.getByLabel('Confirm passphrase').fill(PASS);
-      await page.locator('.e2ee-prompt').getByRole('button', { name: 'Turn on encryption' }).click();
-      await page.locator('.e2ee-prompt').waitFor({ state: 'detached' });
-    };
-    await turnOn(f);
-    await turnOn(g);
+    assert(await models.UsersModel.exists({ _id: frank._id, e2eePublicKey: { $type: 'string' } }), 'key not created');
 
     await search(f, 'Grace');
     await entity(f, 'Grace').click();
@@ -530,16 +570,37 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     const other = await user(browser, 'grace@test.invalid');
     pages = { ...pages, other };
     await entity(other, 'Frank').click();
-    await bubble(other, 'Unlock encryption to read').first().waitFor();
-    await other.getByRole('button', { name: /Unlock encrypted messages/ }).click();
-    await other.getByLabel('Encryption passphrase').fill('wrong passphrase');
-    await other.locator('.e2ee-prompt').getByRole('button', { name: 'Unlock' }).click();
-    await other.getByText('That passphrase is not correct').waitFor();
-    await other.getByLabel('Encryption passphrase').fill(PASS);
-    await other.locator('.e2ee-prompt').getByRole('button', { name: 'Unlock' }).click();
+    await other.getByText('Approve this device').first().waitFor();
+    const shown = await other.getByTestId('link-code').first().innerText();
+    await g.getByRole('alertdialog').getByRole('button', { name: 'Decline' }).click();
+    await other.waitForTimeout(6000);
+    assert(!(await g.getByRole('alertdialog').count()), 'a declined device asked again');
+    await other.reload();
+    await ready(other);
+    await entity(other, 'Frank').click();
+    const shownAgain = await other.getByTestId('link-code').first().innerText();
+    assert(shown !== shownAgain || shownAgain.length === 6, 'no code');
+    assert((await g.getByTestId('link-request-code').innerText()) === shownAgain, 'codes differ between devices');
+    await g.getByRole('alertdialog').getByRole('button', { name: 'Approve' }).click();
     await bubble(other, 'top secret edited').waitFor();
     await send(other, 'from my new device');
     await entity(f, 'Grace').filter({ hasText: 'from my new device' }).waitFor();
+    await g.getByRole('button', { name: 'Close' }).first().click().catch(() => {});
+    await g.getByRole('button', { name: 'Settings' }).first().click();
+    await g.getByRole('button', { name: 'Log out', exact: true }).click();
+    await g.waitForURL('**/auth/signin');
+    await signIn(g, 'grace@test.invalid');
+    await entity(g, 'Frank').click();
+    await bubble(g, 'top secret edited').waitFor();
+
+    await g.locator('button:has(img[src="/attachment.svg"])').click();
+    await g.getByRole('button', { name: /Location/ }).first().click();
+    await g.getByRole('button', { name: /live/i }).first().click();
+    await g.getByRole('button', { name: '15 minutes' }).click();
+    await g.locator('.leaflet-container').waitFor();
+    await g.waitForTimeout(800);
+    const live = await models.MessagesModel.findOne({ uid: grace._id, 'location.live': true }).lean();
+    assert(live?.e2ee && live.location.lat === undefined, 'live location is not sealed');
     pages = { a, b };
     await Promise.all([f, g, other].map((page) => page.context().close()));
   });
@@ -628,6 +689,121 @@ const reload = async (page) => { await page.reload(); await ready(page); };
     assert(leaked === '', leaked);
     await page.context().close();
   });
+
+  await check('phone sweep: every screen and menu fits and works', async () => {
+    const page = await user(browser, 'alice@test.invalid', { width: 375, height: 667 }, { ...media, hasTouch: true });
+    pages = { ...pages, phone: page };
+    await a.getByRole('alertdialog').getByRole('button', { name: 'Approve' }).click();
+    await page.locator('.e2ee-prompt').waitFor({ state: 'detached' });
+    const problems = [];
+    const inspect = async (name, selector) => {
+      await page.waitForTimeout(450);
+      await page.screenshot({ path: `${SHOTS}/phone-${name}.png` });
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      if (overflow > 0) problems.push(`${name}: page overflows by ${overflow}px`);
+      const offscreen = await page.evaluate((target) => {
+        const out = [];
+        document.querySelectorAll(target || 'button, input, textarea').forEach((el) => {
+          const r = el.getBoundingClientRect();
+          if (!r.width || getComputedStyle(el).visibility === 'hidden') return;
+          if (r.left < -1 || r.right > window.innerWidth + 1) out.push(`${el.getAttribute('aria-label') || el.textContent.trim().slice(0, 24) || el.tagName} x=${Math.round(r.left)}..${Math.round(r.right)}`);
+        });
+        return out.slice(0, 5);
+      }, selector);
+      offscreen.forEach((item) => problems.push(`${name}: ${item}`));
+    };
+    const tap = (name) => page.getByRole('button', { name, exact: true }).first().click();
+    await inspect('list');
+    await tap('Settings');
+    await inspect('settings');
+    await page.getByRole('button', { name: /Close|Back/ }).first().click();
+    await tap('New group');
+    await inspect('new-group');
+    await page.getByRole('button', { name: /Close|Back/ }).first().click();
+    await tap('Starred messages');
+    await inspect('starred');
+    await page.getByRole('button', { name: /Close|Back/ }).first().click();
+    await page.getByRole('tab', { name: /Missed calls/ }).click();
+    await inspect('missed-calls');
+    await page.getByRole('tab', { name: 'Chats' }).click();
+    await entity(page, 'Bob').click();
+    await composer(page).waitFor();
+    await inspect('chat');
+    await page.locator('button:has(img[src="/attachment.svg"])').click();
+    await inspect('attach-menu');
+    await page.keyboard.press('Escape');
+    await page.locator('.message-list').click({ position: { x: 20, y: 20 } });
+    await page.getByRole('button', { name: /emoji/i }).first().click();
+    await inspect('emoji');
+    await page.locator('.message-list').click({ position: { x: 20, y: 20 } });
+    await page.getByRole('button', { name: 'Options', exact: true }).click();
+    await inspect('options');
+    await page.locator('.message-list').click({ position: { x: 20, y: 20 } });
+    await page.locator('.message-bubble').last().click({ button: 'right' });
+    await inspect('context-menu', '.message-context-menu button');
+    await page.getByRole('button', { name: 'React with ❤️' }).click();
+    await page.locator('.message-reaction-chip', { hasText: '❤️' }).first().waitFor();
+    assert(!(await page.locator('.message-reaction-trigger').first().isVisible()), 'hover-only button shown on touch');
+    await page.locator('.message-titlebar button').nth(1).click();
+    await page.getByTestId('safety-number').waitFor();
+    assert(await page.getByPlaceholder('Add a short description…').count() === 0, 'read-only description looks editable');
+    await page.getByText('doc.pdf').first().waitFor();
+    await inspect('chat-info');
+    await page.getByRole('button', { name: 'Close' }).first().click();
+    await composer(page).waitFor();
+    await page.getByRole('button', { name: 'Back to chats' }).click();
+    assert(!/\n0$|\b0\s*$/.test(await page.locator('.chat-entity').first().innerText()), 'stray zero in the chat row');
+    assert(problems.length === 0, problems.join(' | '));
+    pages = { a, b };
+    await page.context().close();
+  });
+
+  for (const [label, width, height] of [['small-phone', 320, 568], ['large-phone', 430, 932], ['landscape', 667, 375], ['tablet', 768, 1024], ['tablet-wide', 1024, 768], ['laptop', 1366, 768], ['desktop', 1920, 1080]]) {
+    await check(`layout at ${label} (${width}x${height})`, async () => {
+      await a.setViewportSize({ width, height });
+      const problems = [];
+      const inspect = async (name) => {
+        await a.waitForTimeout(400);
+        await a.screenshot({ path: `${SHOTS}/size-${label}-${name}.png` });
+        const found = await a.evaluate(() => {
+          const out = [];
+          const excess = document.documentElement.scrollWidth - window.innerWidth;
+          if (excess > 0) out.push(`page overflows by ${excess}px`);
+          document.querySelectorAll('button, input, textarea, .message-bubble, .chat-entity').forEach((el) => {
+            const r = el.getBoundingClientRect();
+            const style = getComputedStyle(el);
+            if (!r.width || style.visibility === 'hidden' || style.opacity === '0') return;
+            if (r.left < -1 || r.right > window.innerWidth + 1) out.push(`${el.getAttribute('aria-label') || el.textContent.trim().slice(0, 20) || el.tagName} x=${Math.round(r.left)}..${Math.round(r.right)}`);
+          });
+          const box = document.querySelector('textarea[aria-label="Message"]')?.getBoundingClientRect();
+          if (box && (box.bottom > window.innerHeight || box.top < 0)) out.push(`composer y=${Math.round(box.top)}..${Math.round(box.bottom)}`);
+          return out.slice(0, 5);
+        });
+        found.forEach((item) => problems.push(`${name}: ${item}`));
+      };
+      await a.waitForTimeout(500);
+      const expand = a.getByRole('button', { name: 'Expand sidebar' });
+      if (await expand.count()) await expand.click();
+      if (await a.getByRole('button', { name: 'Back to chats' }).count()) await a.getByRole('button', { name: 'Back to chats' }).click();
+      await a.getByRole('tab', { name: 'Chats' }).click();
+      await inspect('list');
+      await entity(a, 'Bob').click();
+      await composer(a).waitFor();
+      await inspect('chat');
+      await a.locator('.message-titlebar button:has(img)').nth(width < 768 ? 1 : 0).click();
+      await inspect('info');
+      await a.getByRole('button', { name: 'Close' }).first().click();
+      await composer(a).waitFor();
+      await a.getByRole('button', { name: 'Settings' }).first().click().catch(async () => {
+        await a.getByRole('button', { name: 'Back to chats' }).click();
+        await a.getByRole('button', { name: 'Settings' }).first().click();
+      });
+      await inspect('settings');
+      await a.getByRole('button', { name: 'Close' }).first().click();
+      await a.setViewportSize({ width: 1280, height: 800 });
+      assert(problems.length === 0, problems.join(' | '));
+    });
+  }
 
   await check('log out of all devices ends the other device at once', async () => {
     const first = await user(browser, 'carol@test.invalid');

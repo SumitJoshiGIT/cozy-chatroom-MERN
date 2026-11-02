@@ -29,12 +29,12 @@ export default function ForwardDialog({ items, onClose }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-30 animate-fade-in">
       <Card className="w-80 max-h-[70vh] flex flex-col p-4">
         <div className="flex items-center justify-between mb-3">
-          <div className="font-semibold text-gray-800">Forward message</div>
+          <div className="font-semibold text-ink">Forward message</div>
           <button onClick={onClose}>
             <img src={close} className="w-4 h-4" />
           </button>
         </div>
-        <div className="text-xs text-gray-400 mb-2 truncate">
+        <div className="text-xs text-ink-muted mb-2 truncate">
           {messages.length === 1 ? `"${messages[0].content}"` : `${messages.length} messages selected`}
         </div>
         <div className="flex-1 overflow-y-auto flex flex-col gap-1">
@@ -42,10 +42,10 @@ export default function ForwardDialog({ items, onClose }) {
             <button
               key={c._id}
               onClick={() => setSelected(c._id)}
-              className={`flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 ${selected === c._id ? "bg-[var(--accent-light)]" : ""}`}
+              className={`flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent-soft ${selected === c._id ? "bg-[var(--accent-light)]" : ""}`}
             >
               <Avatar src={c.img && c.img.src} kind={c.type === "group" ? "group" : "user"} size="xs" />
-              <div className="text-sm text-gray-700 truncate">{c.name || "Unnamed"}</div>
+              <div className="text-sm text-ink truncate">{c.name || "Unnamed"}</div>
             </button>
           ))}
         </div>

@@ -12,7 +12,7 @@ export default function (props){
       return (
         <div className="flex flex-col items-center gap-2 w-full pb-3">
           <IconButton icon={menu} alt="Expand sidebar" onClick={()=>{props.setStyle((prev)=>!prev)}} />
-          <div className="w-8 h-px bg-black/10 dark:bg-white/10" />
+          <div className="w-8 h-px bg-black/10 " />
           <IconButton icon={starred} alt="Starred messages" onClick={()=>{setMessageDialog(6)}} />
           <SettingsButton/>
           <IconButton icon={add} alt="New group" onClick={()=>{setMessageDialog(4)}} />
@@ -25,7 +25,7 @@ export default function (props){
         <div className="flex items-center gap-2">
           <IconButton icon={menu} alt="Collapse sidebar" onClick={()=>{props.setStyle((prev)=>!prev)}} />
           <div>
-            <h1 className="text-xl font-bold text-gray-700 dark:text-gray-100">Messages</h1>
+            <h1 className="text-xl font-bold text-ink ">Messages</h1>
           </div>
         </div>
         <div className="flex items-center gap-1">

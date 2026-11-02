@@ -88,7 +88,7 @@ export default function VoiceNote({ src }) {
             return (
               <span
                 key={i}
-                className={`flex-1 min-w-[2px] rounded-full transition-colors ${played ? "bg-[var(--accent)]" : "bg-black/20 dark:bg-white/25"}`}
+                className={`flex-1 min-w-[2px] rounded-full transition-colors ${played ? "bg-[var(--accent)]" : "bg-black/20 "}`}
                 style={{ height: `${Math.round(h * 100)}%` }}
               />
             );

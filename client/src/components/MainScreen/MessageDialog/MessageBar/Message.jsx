@@ -32,21 +32,21 @@ const formatSize = (bytes) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 const FILE_BADGES = {
-  "application/pdf": { label: "PDF", className: "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300" },
-  "application/msword": { label: "DOC", className: "bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300" },
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { label: "DOC", className: "bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300" },
-  "application/vnd.ms-excel": { label: "XLS", className: "bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300" },
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { label: "XLS", className: "bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300" },
-  "application/vnd.ms-powerpoint": { label: "PPT", className: "bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-300" },
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation": { label: "PPT", className: "bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-300" },
-  "text/plain": { label: "TXT", className: "bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-200" },
-  "text/csv": { label: "CSV", className: "bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300" },
-  "application/zip": { label: "ZIP", className: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300" },
+  "application/pdf": { label: "PDF", className: "bg-danger-soft text-danger " },
+  "application/msword": { label: "DOC", className: "bg-blue-100 text-accent-dark " },
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { label: "DOC", className: "bg-blue-100 text-accent-dark " },
+  "application/vnd.ms-excel": { label: "XLS", className: "bg-success-soft text-success " },
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { label: "XLS", className: "bg-success-soft text-success " },
+  "application/vnd.ms-powerpoint": { label: "PPT", className: "bg-orange-100 text-orange-600 " },
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": { label: "PPT", className: "bg-orange-100 text-orange-600 " },
+  "text/plain": { label: "TXT", className: "bg-surface-muted text-ink-muted " },
+  "text/csv": { label: "CSV", className: "bg-success-soft text-success " },
+  "application/zip": { label: "ZIP", className: "bg-amber-100 text-amber-700 " },
 };
 const fileBadge = (contentType, name) =>
   FILE_BADGES[contentType] || {
     label: (name || "").split(".").pop()?.slice(0, 3).toUpperCase() || "FILE",
-    className: "bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-200",
+    className: "bg-surface-muted text-ink-muted ",
   };
 
 export default function (props) {
@@ -75,6 +75,8 @@ export default function (props) {
     messageItem.createdAt || messageItem.time || messageItem.updatedAt
   );
   const flag = messageItem.uid == userID.current;
+  // Opening a chat mounts every row at once, so only new messages animate.
+  const [fresh] = useState(() => messageItem.status === "⧖" || Date.now() - time.getTime() < 3000);
   const repliedMessage = props.reply_to
     ? props.reply_data || messageItem.replyToMessage
     : null;
@@ -239,7 +241,7 @@ export default function (props) {
       onPointerUp={cancelLongPress}
       onPointerCancel={cancelLongPress}
       onPointerMove={cancelLongPress}
-      className={`message-row w-full flex ${grouped ? "mt-0.5" : "mt-2.5"} ${flag ? "justify-end" : "justify-start"} ${flag ? "message-row-out" : "message-row-in"} ${props.selectionMode ? "is-selecting" : ""} ${props.selected ? "is-selected" : ""} ${props.highlighted ? "is-highlighted" : ""}`}
+      className={`message-row ${fresh ? "is-fresh" : ""} w-full flex ${grouped ? "mt-0.5" : "mt-2.5"} ${flag ? "justify-end" : "justify-start"} ${flag ? "message-row-out" : "message-row-in"} ${props.selectionMode ? "is-selecting" : ""} ${props.selected ? "is-selected" : ""} ${props.highlighted ? "is-highlighted" : ""}`}
     >
       {props.selectionMode && (
         <span className={`message-select-check ${props.selected ? "is-checked" : ""}`} aria-hidden="true" />
@@ -257,7 +259,7 @@ export default function (props) {
 
       <div onContextMenu={handleRight} className="relative group max-w-[75%] md:max-w-[60%]">
         {deleting && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/30 rounded-2xl z-10">
+          <div className="absolute inset-0 flex items-center justify-center bg-white/50 rounded-2xl z-10">
             <Spinner size="sm" />
           </div>
         )}
@@ -281,11 +283,11 @@ export default function (props) {
             {repliedMessage ? (
               <div
                 onClick={() => props.jumpToMessage(repliedMessage)}
-                className="cursor-pointer flex flex-col overflow-clip rounded-md pl-2 py-1 mb-1 bg-black/5 border-l-2 text-xs"
+                className="cursor-pointer flex flex-col overflow-clip rounded-md pl-2 py-1 mb-1 bg-surface-muted border-l-2 text-xs"
                 style={{ borderColor: repliedProfile.color || '#a78bfa' }}
               >
                 <p style={{ color: readableColor(repliedProfile.color) }} className="truncate font-bold">{repliedProfile.name || "Unknown"}</p>
-                <span className="truncate text-gray-500">
+                <span className="truncate text-ink-muted">
                   {repliedMessage.content}
                 </span>
               </div>
@@ -315,7 +317,7 @@ export default function (props) {
                   ) : (a.contentType || "").startsWith("audio/") ? (
                     <VoiceNote key={idx} src={attachmentUrl(a, mediaToken)} />
                   ) : (
-                    <div key={idx} className="w-64">
+                    <div key={idx} className="w-64 max-w-full">
                       <DocumentPreview
                         src={attachmentUrl(a, mediaToken)}
                         name={a.name}
@@ -387,11 +389,11 @@ export default function (props) {
                     className={`message-reaction-chip text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 ${
                       (r.users||[]).includes(userID.current)
                         ? "bg-[var(--accent-light)] border-[var(--accent)]"
-                        : "bg-black/5 dark:bg-white/10 border-transparent"
+                        : "bg-surface-muted border-transparent"
                     }`}
                   >
                     <span>{r.emoji}</span>
-                    <span className="text-gray-500 dark:text-gray-300">{r.users.length}</span>
+                    <span className="text-ink-muted ">{r.users.length}</span>
                   </button>
                 ))}
               </div>
@@ -413,7 +415,7 @@ export default function (props) {
         </button>
         {showReactions && (
           <div
-            className={`message-reaction-picker absolute z-30 flex gap-1 bg-white dark:bg-gray-800 border border-black/5 dark:border-white/10 shadow-lg rounded-full px-2 py-1 -top-11 ${flag ? "right-0" : "left-0"}`}
+            className={`message-reaction-picker absolute z-30 flex gap-1 bg-surface border border-line shadow-lg rounded-full px-2 py-1 -top-11 ${flag ? "right-0" : "left-0"}`}
           >
             {REACTION_EMOJIS.map((e) => (
               <button
@@ -432,23 +434,28 @@ export default function (props) {
           style={{ left: contextOpen.x, top: contextOpen.y }}
           className="message-context-menu is-open font-semibold fixed text-sm w-44 py-1 h-fit z-50"
         >
+          <div className="message-menu-reactions">
+            {REACTION_EMOJIS.map((e) => (
+              <button key={e} type="button" aria-label={`React with ${e}`} onClick={() => reactHandle(e)}>{e}</button>
+            ))}
+          </div>
           <button
             onClick={() => { replyHandle(); closeMenu(); }}
-            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-accent-soft "
           >
             <img src={reply} className="w-4 h-4 dark:invert dark:opacity-80"></img>
             <div>Reply</div>
           </button>
           <button
             onClick={() => { copyHandle(); closeMenu(); }}
-            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-accent-soft "
           >
             <img src={copy} className="w-4 h-4 dark:invert dark:opacity-80"></img>
             <div>Copy Text</div>
           </button>
           <button
             onClick={() => { forwardHandle(); closeMenu(); }}
-            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-accent-soft "
           >
             <img src={forward} className="w-4 h-4 dark:invert dark:opacity-80"></img>
             <div>Forward</div>
@@ -456,16 +463,16 @@ export default function (props) {
 
           <button
             onClick={() => { starHandle(); closeMenu(); }}
-            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-accent-soft "
           >
-            <span className={`w-4 h-4 flex items-center justify-center ${isStarred ? "text-amber-500" : "text-gray-500"}`}>★</span>
+            <span className={`w-4 h-4 flex items-center justify-center ${isStarred ? "text-amber-500" : "text-ink-muted"}`}>★</span>
             <div>{isStarred ? "Unstar" : "Star"}</div>
           </button>
 
           {canPin && (
             <button
               onClick={() => { pinHandle(); closeMenu(); }}
-              className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-accent-soft "
             >
               <span className={`w-4 h-4 flex items-center justify-center ${isPinned ? "" : "opacity-60"}`}>📌</span>
               <div>{isPinned ? "Unpin" : "Pin"}</div>
@@ -475,7 +482,7 @@ export default function (props) {
           {canEdit && (
             <button
               onClick={() => { editHandle(); closeMenu(); }}
-              className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-accent-soft "
             >
               <img src={edit} className="w-4 h-4 dark:invert dark:opacity-80"></img>
               <div>Edit</div>
@@ -484,16 +491,16 @@ export default function (props) {
 
           <button
             onClick={() => { props.onEnterSelection(messageItem._id); closeMenu(); }}
-            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-accent-soft "
           >
-            <span className="w-4 h-4 flex items-center justify-center text-gray-500">✓</span>
+            <span className="w-4 h-4 flex items-center justify-center text-ink-muted">✓</span>
             <div>Select</div>
           </button>
 
           {canDelete && (
             <button
               onClick={() => { deleteHandle(); closeMenu(); }}
-              className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-accent-soft "
             >
               <img src={del} className="w-4 h-4 dark:invert dark:opacity-80"></img>
               <div>Delete</div>
@@ -502,7 +509,7 @@ export default function (props) {
 
           <button
             onClick={() => { reportHandle(); closeMenu(); }}
-            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="px-2 py-1.5 items-center gap-2 rounded-lg flex w-full hover:bg-accent-soft "
           >
             <img src={reportIcon} className="w-4 h-4 dark:invert dark:opacity-80"></img>
             <div>Report</div>

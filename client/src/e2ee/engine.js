@@ -1,12 +1,12 @@
 import * as crypto from "./crypto";
 import { loadIdentity, saveIdentity, loadPin, savePin } from "./keystore";
 
-export const LOCKED_TEXT = "🔒 Unlock encryption to read this message";
+export const LOCKED_TEXT = "🔒 Approve this device to read this message";
 export const UNREADABLE_TEXT = "🔒 This message can't be decrypted on this device";
 const KEY_CACHE_MS = 60000;
 
 // Holds one signed-in account's keys for the lifetime of the page.
-export function createE2ee({ socket, userId, onStatus, onKeyChange }) {
+export function createE2ee({ socket, userId, onStatus, onKeyChange, onEnabled, onLinkCode }) {
   let status = crypto.isSupported() ? "loading" : "unavailable";
   let identity = null;
   let sendQueue = Promise.resolve();
@@ -23,39 +23,67 @@ export function createE2ee({ socket, userId, onStatus, onKeyChange }) {
     identity = (await loadIdentity(userId)) || null;
     if (!serverPublicKey) {
       identity = null;
-      return setStatus("none");
+      try {
+        await createKey(false);
+        onEnabled();
+      } catch {
+        setStatus("none");
+      }
+      return;
     }
     if (identity?.publicKey !== serverPublicKey) {
       identity = null;
-      return setStatus("locked");
+      setStatus("locked");
+      return requestLink();
     }
     setStatus("ready");
   }
 
-  async function adopt(publicKey, privateKey) {
-    identity = { publicKey, privateKey };
+  async function adopt(next) {
+    identity = next;
     await saveIdentity(userId, identity);
+    stopLink();
     setStatus("ready");
   }
 
-  // Setting up and resetting are the same act: a new key replaces any old one.
-  async function setUp(passphrase) {
-    const { publicKey, privateKey, backup } = await crypto.createIdentity(passphrase);
-    const result = await request("e2eeSetKey", { publicKey, backup });
+  // Without replace, the server refuses if another tab got there first.
+  async function createKey(replace) {
+    const created = await crypto.createIdentity();
+    const result = await request("e2eeSetKey", { publicKey: created.publicKey, replace });
+    if (result?.publicKey) return load(result.publicKey);
     if (!result?.ok) throw new Error("The key could not be saved.");
-    await adopt(publicKey, privateKey);
+    await adopt(created);
   }
 
-  async function unlock(passphrase) {
-    const { publicKey, backup } = await request("e2eeGetBackup", {});
-    if (!publicKey || !backup) throw new Error("No encryption key was found for this account.");
-    let privateKey;
+  // A new device asks every other signed-in device for the account key.
+  let link = null;
+  function stopLink() {
+    clearInterval(link?.timer);
+    link = null;
+    onLinkCode(null);
+  }
+
+  async function requestLink() {
+    if (link) return;
+    link = await crypto.createIdentity();
+    onLinkCode(await crypto.linkCode(link.publicKey));
+    const ask = () => socket.current.emit("e2eeLinkRequest", { publicKey: link.publicKey });
+    ask();
+    link.timer = setInterval(ask, 5000);
+  }
+
+  async function receiveLink(sealed) {
+    if (!link) return;
     try {
-      privateKey = await crypto.restoreIdentity(backup, passphrase);
+      await adopt(await crypto.openIdentity(sealed, link.privateKey));
     } catch {
-      throw new Error("That passphrase is not correct.");
+      onKeyChange(userId);
     }
-    await adopt(publicKey, privateKey);
+  }
+
+  async function approveLink(requestId, publicKey) {
+    if (status !== "ready") return;
+    socket.current.emit("e2eeLinkGrant", { requestId, sealed: await crypto.sealIdentity(identity, publicKey) });
   }
 
   // Trust on first use: the server can't swap a key we've seen without the
@@ -112,7 +140,7 @@ export function createE2ee({ socket, userId, onStatus, onKeyChange }) {
   // Returns the fields to send. Falls back to plaintext only when someone in
   // the chat has no key at all, which the chat shows as not encrypted.
   async function prepare(uids, { content = "", attachments = [], location, keptFiles = [] }) {
-    if (status === "locked" || status === "loading") throw new Error("Unlock encryption to send messages.");
+    if (status === "locked" || status === "loading") throw new Error("Approve this device to send messages.");
     if (status !== "ready") return { content, attachments };
     const recipients = await recipientKeys(uids);
     if (!keysComplete(recipients)) return { content, attachments };
@@ -160,12 +188,12 @@ export function createE2ee({ socket, userId, onStatus, onKeyChange }) {
         return {
           src: attachment.src,
           name: detail.name,
-          contentType: detail.type,
+          contentType: crypto.safeMediaType(detail.type),
           size: detail.size,
           sealedWith: { key: detail.key, iv: detail.iv },
         };
       });
-      const located = plain.l ? { type: "location", location: plain.l } : {};
+      const located = plain.l ? { type: "location", location: { ...opened.location, ...plain.l } } : {};
       return { ...opened, ...located, encrypted: true, locked: false, unreadable: false, content: plain.t || "", attachments };
     } catch {
       return { ...opened, encrypted: true, locked: false, unreadable: true, content: UNREADABLE_TEXT };
@@ -183,7 +211,7 @@ export function createE2ee({ socket, userId, onStatus, onKeyChange }) {
         locked: false,
         content: plain.t || "",
         type: plain.l ? "location" : last.type,
-        attachmentType: first?.type,
+        attachmentType: first && crypto.safeMediaType(first.type),
         attachmentName: first?.name,
       };
     } catch {
@@ -198,8 +226,8 @@ export function createE2ee({ socket, userId, onStatus, onKeyChange }) {
   }
 
   return {
-    load, setUp, unlock, willEncrypt, prepare, enqueue, openMessage, openPreview, safetyNumberWith,
-    decryptBytes: crypto.decryptBytes,
+    load, createKey, requestLink, receiveLink, approveLink, linkCode: crypto.linkCode, willEncrypt, prepare, enqueue, openMessage, openPreview, safetyNumberWith,
+    unseal,
     get status() { return status; },
   };
 }

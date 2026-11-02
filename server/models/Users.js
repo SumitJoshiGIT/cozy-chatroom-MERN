@@ -82,16 +82,10 @@ const Users=new mongoose.Schema
       type:Boolean,
       default:false,
    },
-   // End-to-end encryption. The private key only reaches the server inside this
-   // backup, encrypted with a passphrase the server never sees.
+   // End-to-end encryption. Private keys only ever exist on the user's devices.
    e2eePublicKey:{
     type:String,
     default:null,
-   },
-   e2eeBackup:{
-    type:{ ct:String, iv:String, salt:String, iterations:Number },
-    default:null,
-    select:false,
    },
    tokensValidAfter:{
       type:Date,

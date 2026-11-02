@@ -10,6 +10,7 @@ import { useToast } from "../../../ui/Toast.jsx";
 import { downloadFile } from "../../../../download";
 import Members from "./Members.jsx";
 import Media from './Media.jsx'
+import SafetyNumber from '../SafetyNumber'
 import Permissions from "./Permissions.jsx";
 import close from '/close.svg'
 const Tabs={
@@ -107,20 +108,24 @@ export default function (props) {
           value={`@${username}`}
         />
 
-        <TextArea
-          disabled={!admin}
-          onChange={(event) => setAbout(event.target.value)}
-          onBlur={() => {
-            socket.current.emit("updateChat", {
-              cid: chatID.id,
-              about: aboutSt,
-            });
-          }}
-          className="profile-about mt-2 max-w-md h-20 w-full"
-          value={aboutSt}
-          placeholder="Add a short description…"
-        />
+        {admin ? (
+          <TextArea
+            onChange={(event) => setAbout(event.target.value)}
+            onBlur={() => {
+              socket.current.emit("updateChat", {
+                cid: chatID.id,
+                about: aboutSt,
+              });
+            }}
+            className="profile-about mt-2 max-w-md h-20 w-full"
+            value={aboutSt}
+            placeholder="Add a short description…"
+          />
+        ) : aboutSt.trim() ? (
+          <div className="profile-about profile-about-readonly mt-2 max-w-md w-full">{aboutSt}</div>
+        ) : null}
 
+        {chat.type !== 'group' && <SafetyNumber uid={chat.sender} />}
         <div className="flex flex-wrap gap-2 mt-1">
           {chat.type !== 'group' && chat.sender && (
             <Button variant={isBlocked ? "ghost" : "danger"} onClick={() => toggleBlock(chat.sender)}>
@@ -183,10 +188,10 @@ export default function (props) {
         )}
        </div>
        <div>
-            <div className="items-center flex w-full border-b text-gray-500 text-sm font-semibold">
-              {chat.type == "group"&&<button className={`flex-1 p-2 pb-2.5 transition-colors ${active===1?'text-purple-600 border-b-2 border-purple-400':'hover:text-gray-600'}`} onClick={()=>setActive(1)}>Members</button>}
-              <button className={`flex-1 p-2 pb-2.5 transition-colors ${active===0?'text-purple-600 border-b-2 border-purple-400':'hover:text-gray-600'}`} onClick={()=>setActive(0)}>Media</button>
-              {admin&&<button className={`flex-1 p-2 pb-2.5 transition-colors ${active===2?'text-purple-600 border-b-2 border-purple-400':'hover:text-gray-600'}`} onClick={()=>setActive(2)}>Permissions</button>}
+            <div className="items-center flex w-full border-b text-ink-muted text-sm font-semibold">
+              {chat.type == "group"&&<button className={`flex-1 p-2 pb-2.5 transition-colors ${active===1?'text-accent-dark border-b-2 border-accent':'hover:text-ink-muted'}`} onClick={()=>setActive(1)}>Members</button>}
+              <button className={`flex-1 p-2 pb-2.5 transition-colors ${active===0?'text-accent-dark border-b-2 border-accent':'hover:text-ink-muted'}`} onClick={()=>setActive(0)}>Media</button>
+              {admin&&<button className={`flex-1 p-2 pb-2.5 transition-colors ${active===2?'text-accent-dark border-b-2 border-accent':'hover:text-ink-muted'}`} onClick={()=>setActive(2)}>Permissions</button>}
             </div>
        {chat&&ActiveTab&&<ActiveTab chat={chat} admin={admin} owner={isOwner}/>}
 

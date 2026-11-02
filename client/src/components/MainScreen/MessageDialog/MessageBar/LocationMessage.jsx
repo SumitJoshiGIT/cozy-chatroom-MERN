@@ -57,15 +57,15 @@ export default function LocationMessage({ location, flag, onStop }) {
   const mapsUrl = `https://www.google.com/maps?q=${location.lat},${location.lng}`;
 
   return (
-    <div className="w-56 rounded-2xl overflow-hidden shadow-sm border border-black/5 dark:border-white/10">
+    <div className="w-56 max-w-full rounded-2xl overflow-hidden shadow-sm border border-line ">
       <a href={mapsUrl} target="_blank" rel="noreferrer" title="Open in Maps" className="block">
-        <div ref={containerRef} className="w-56 h-36" />
+        <div ref={containerRef} className="w-full h-36" />
       </a>
-      <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-black/5 dark:bg-white/10 text-xs">
-        <span className="flex items-center gap-1 text-gray-600 dark:text-gray-300">
+      <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-surface-muted text-xs">
+        <span className="flex items-center gap-1 text-ink-muted ">
           {isLive ? (
             <>
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-danger animate-pulse shrink-0" />
               Live until {formatUntil(location.expiresAt)}
             </>
           ) : location.live ? (

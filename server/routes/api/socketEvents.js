@@ -116,6 +116,14 @@ const MAX_E2EE_RECIPIENTS = 1024;
 const MAX_E2EE_TEXT = 256 * 1024;
 
 // The server can't read an envelope, but it can refuse junk and bound its size.
+// Sealed live locations keep their coordinates in the envelope. The server
+// only knows sharing is on, and until when.
+function liveFields(sealed, live) {
+  if (!sealed || !live) return {};
+  const durationMs = Math.min(Math.max(Number(live.durationMs) || 0, 0), 8 * 60 * 60 * 1000);
+  return { type: "location", location: { live: true, expiresAt: new Date(Date.now() + (durationMs || 15 * 60 * 1000)) } };
+}
+
 function isEnvelope(value) {
   if (!value || typeof value !== "object" || value.v !== 1) return false;
   if (!isBase64(value.spk, 128) || !isBase64(value.iv, 32) || !isBase64(value.ct, MAX_E2EE_TEXT)) return false;
@@ -123,9 +131,6 @@ function isEnvelope(value) {
   if (!entries.length || entries.length > MAX_E2EE_RECIPIENTS) return false;
   return entries.every(([uid, entry]) => isId(uid) && entry && isBase64(entry.iv, 32) && isBase64(entry.k, 128));
 }
-
-const isKeyBackup = (value) => !!value && isBase64(value.ct, 1024) && isBase64(value.iv, 32) && isBase64(value.salt, 64)
-  && Number.isInteger(value.iterations) && value.iterations >= 100000 && value.iterations <= 10000000;
 
 // Sealed files are opaque by design, so there is no type or signature to check.
 async function saveUpload(base64, mimeType, name, uid, extraTypes, isAttachment = false, sealed = false) {
@@ -395,7 +400,7 @@ function onConnection(socket, io) {
 
   const expiryFor = (chat) => (chat.disappearingDuration ? new Date(Date.now() + chat.disappearingDuration * 1000) : null);
 
-  async function SendMessage(message) {
+  async function SendMessage(message, ack) {
     socketLog("sendMessage:received", { cid: message && message.cid, replace: message && message.replace });
     if (!message || !inChat(message.cid)) {
       socket.emit("messageError", {
@@ -445,6 +450,7 @@ function onConnection(socket, io) {
       chat: message.cid,
       content,
       e2ee: sealed,
+      ...liveFields(sealed, message.live),
       uid: profile._id,
       reply_to: replyTo,
       status: "✔",
@@ -460,6 +466,7 @@ function onConnection(socket, io) {
       io.to(message.cid).emit("messages", { id: message.cid, replace, data: [newMessage] });
       sendPushNotifications(parentChat, newMessage).catch((err) => console.error("push failed", err.message));
       socketLog("sendMessage:sent", { cid: message.cid, messageId: String(newMessage._id) });
+      if (typeof ack === "function") ack({ _id: newMessage._id });
     } catch (err) {
       console.error("[socket] sendMessage:failed", err);
       socket.emit("messageError", { event: "sendMessage", replace, message: "Your message could not be saved. Please try again." });
@@ -535,11 +542,19 @@ function onConnection(socket, io) {
     if (!stream || !isId(stream.id)) return;
     const lat = Number(stream.lat);
     const lng = Number(stream.lng);
-    if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
+    const sealedUpdate = stream.e2ee && isEnvelope(stream.e2ee) ? stream.e2ee : null;
+    if (!sealedUpdate && (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180)) return;
     const message = await models.MessagesModel.findById(stream.id);
     if (!message || !message.location || !message.location.live) return;
     if (!sameId(message.uid, selfId) || !inChat(message.chat.toString())) return;
     if (message.location.expiresAt && message.location.expiresAt.getTime() < Date.now()) return;
+    if (!!message.e2ee !== !!sealedUpdate) return;
+    if (sealedUpdate) {
+      message.e2ee = sealedUpdate;
+      await message.save();
+      io.to(message.chat.toString()).emit("locationUpdated", { cid: message.chat.toString(), mid: message.mid, uid: message.uid, e2ee: sealedUpdate });
+      return;
+    }
     message.location.lat = lat;
     message.location.lng = lng;
     await message.save();
@@ -800,20 +815,33 @@ function onConnection(socket, io) {
     }, CALL_RECONNECT_GRACE_MS);
   });
 
-  socket.on("e2eeSetKey", async ({ publicKey, backup } = {}, ack) => {
+  socket.on("e2eeSetKey", async ({ publicKey, replace } = {}, ack) => {
     const reply = typeof ack === "function" ? ack : () => {};
-    if (!isBase64(publicKey, 128) || !isKeyBackup(backup)) return reply({ ok: false });
-    const { ct, iv, salt, iterations } = backup;
-    await models.UsersModel.findByIdAndUpdate(profile._id, { e2eePublicKey: publicKey, e2eeBackup: { ct, iv, salt, iterations } });
+    if (!isBase64(publicKey, 128)) return reply({ ok: false });
+    // Two tabs of a new account race here; the second adopts the first's key.
+    const filter = replace ? { _id: profile._id } : { _id: profile._id, e2eePublicKey: null };
+    const updated = await models.UsersModel.findOneAndUpdate(filter, { e2eePublicKey: publicKey, $unset: { e2eeBackup: 1 } }, { new: true });
+    if (!updated) {
+      const current = await models.UsersModel.findById(profile._id, "e2eePublicKey");
+      return reply({ ok: false, publicKey: current && current.e2eePublicKey });
+    }
     profile.e2eePublicKey = publicKey;
     socket.to(userRoom(selfId)).emit("e2eeKeyChanged", { publicKey });
     reply({ ok: true });
   });
 
-  socket.on("e2eeGetBackup", async (_, ack) => {
-    if (typeof ack !== "function") return;
-    const user = await models.UsersModel.findById(profile._id, "e2eePublicKey +e2eeBackup");
-    ack({ publicKey: user?.e2eePublicKey || null, backup: user?.e2eeBackup || null });
+  // The server only relays these. The key inside a grant is sealed to the
+  // requesting device, and the user compares a code before approving.
+  socket.on("e2eeLinkRequest", ({ publicKey } = {}) => {
+    if (!isBase64(publicKey, 128)) return;
+    socket.to(userRoom(selfId)).emit("e2eeLinkRequest", { requestId: socket.id, publicKey });
+  });
+
+  socket.on("e2eeLinkGrant", ({ requestId, sealed } = {}) => {
+    const target = typeof requestId === "string" ? io.sockets.sockets.get(requestId) : null;
+    if (!target || String(target.data.profile?._id) !== selfId) return;
+    if (!sealed || !isBase64(sealed.spk, 128) || !isBase64(sealed.iv, 32) || !isBase64(sealed.ct, 1024)) return;
+    target.emit("e2eeLinkGranted", { sealed: { spk: sealed.spk, iv: sealed.iv, ct: sealed.ct } });
   });
 
   socket.on("e2eeKeys", async ({ uids } = {}, ack) => {
@@ -821,6 +849,15 @@ function onConnection(socket, io) {
     const ids = uids.filter(isId).slice(0, MAX_E2EE_RECIPIENTS);
     const users = await models.UsersModel.find({ _id: { $in: ids } }, "e2eePublicKey");
     ack(Object.fromEntries(users.map((u) => [String(u._id), u.e2eePublicKey || null])));
+  });
+
+  socket.on("missedCalls", async (_, ack) => {
+    if (typeof ack !== "function") return;
+    const calls = await models.MessagesModel.find(
+      { chat: { $in: memberChatIds() }, type: "call", content: /^Missed/, uid: { $ne: profile._id } },
+      "chat uid content createdAt",
+    ).sort({ createdAt: -1 }).limit(50);
+    ack(calls);
   });
 
   socket.on("tutorialDone", async () => {

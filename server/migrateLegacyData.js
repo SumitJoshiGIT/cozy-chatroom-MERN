@@ -61,6 +61,10 @@ async function decodeField(model, field, options) {
   for (const field of ['name', 'about']) {
     console.log(`user ${field}:`, await decodeField(models.UsersModel, field));
   }
+  // Passphrase backups from before keys moved to devices only.
+  const backups = { e2eeBackup: { $exists: true } };
+  console.log('old key backups:', await mongoose.connection.collection('users').countDocuments(backups));
+  if (apply) await mongoose.connection.collection('users').updateMany(backups, { $unset: { e2eeBackup: 1 } });
   await mongoose.disconnect();
 })().catch(async (err) => {
   console.error(err);

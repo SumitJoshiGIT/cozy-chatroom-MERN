@@ -145,24 +145,24 @@ export default function (props) {
         props.style
           ? 'chat-entity-collapsed justify-center w-12 h-12 shrink-0 mb-1 rounded-full'
           : 'chat-entity-expanded gap-3 w-full px-2 py-2 mb-0.5 rounded-lg'
-      } ${active ? 'bg-purple-100 dark:bg-gray-700' : 'hover:bg-gray-100 dark:hover:bg-gray-700/60'}`}
+      } ${active ? 'bg-accent-soft ' : 'hover:bg-accent-soft '}`}
     >
       <Avatar
         src={chat.img && chat.img.src}
         kind={chat.type == "group" ? "group" : "user"}
         size={props.style ? 'sm' : 'md'}
         imgClassName={props.style ? 'chat-avatar-collapsed' : 'chat-avatar-expanded'}
-        className={props.style && active ? 'ring-2 ring-purple-400' : ''}
+        className={!!props.style && active ? 'ring-2 ring-purple-400' : ''}
       />
 
       {!props.style && (
         <div className="min-w-0 flex-1">
           <div className="flex justify-between items-baseline gap-2">
-            <div className="truncate text-base font-semibold text-gray-800 dark:text-gray-100">
+            <div className="truncate text-base font-semibold text-ink ">
               {chat.name || "Unnamed"}
             </div>
             {latest && (
-              <span className={`text-xs shrink-0 ${unread ? "chat-time-unread" : "text-gray-400"}`}>
+              <span className={`text-xs shrink-0 ${unread ? "chat-time-unread" : "text-ink-muted"}`}>
                 {pad(new Date(latest.createdAt).getHours())}:
                 {pad(new Date(latest.createdAt).getMinutes())}
               </span>
@@ -172,17 +172,17 @@ export default function (props) {
           <div className="min-w-0 flex-1">
           {draft ? (
             <div className="truncate text-sm">
-              <span className="text-red-500 dark:text-red-400">Draft: </span>
-              <span className="text-gray-500 dark:text-gray-400">{draft}</span>
+              <span className="text-danger ">Draft: </span>
+              <span className="text-ink-muted ">{draft}</span>
             </div>
           ) : latest && (
-            <div className="truncate text-sm text-gray-500">
+            <div className="truncate text-sm text-ink-muted">
               {previewName && (
                 <span
                   style={{
                     color: latest.uid == userID.current || !profiles[latest.uid] || !profiles[latest.uid].color ? undefined : `color-mix(in srgb, ${profiles[latest.uid].color} 55%, var(--text))`,
                   }}
-                  className={latest.uid == userID.current ? "text-gray-400" : ""}
+                  className={latest.uid == userID.current ? "text-ink-muted" : ""}
                 >
                   {previewName}:{" "}
                 </span>
@@ -196,7 +196,7 @@ export default function (props) {
           </div>
         </div>
       )}
-      {props.style && unread > 0 && <span className="chat-unread-dot" aria-hidden="true" />}
+      {!!props.style && unread > 0 && <span className="chat-unread-dot" aria-hidden="true" />}
     </div>
   );
 }
